@@ -1,0 +1,130 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  name         String?
+  avatar       String?  // filename in /avatars/ e.g. "King.png"
+  elo          Int      @default(1200)
+  balance      Int      @default(1000) // centavos de USDC (1000 = $10 inicial)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  gamesAsWhite   Game[]         @relation("WhitePlayer")
+  gamesAsBlack   Game[]         @relation("BlackPlayer")
+  ledgerEntries  LedgerEntry[]
+  gameReports   GameReport[]
+  challengesSent     GameChallenge[] @relation("Challenger")
+  challengesReceived GameChallenge[] @relation("Challenged")
+  notifications      Notification[]
+
+  @@map("users")
+}
+
+model Game {
+  id                 String   @id @default(cuid())
+  whiteId            String   @map("white_id")
+  blackId            String   @map("black_id")
+  fen                String   @default("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
+  turn               String   @default("w") // "w" or "b"
+  status             String   @default("active") // "active", "checkmate", "stalemate", "draw", "resigned", "timeout"
+  winner             String?  // whiteId, blackId or null
+  stake              Int      // cents (e.g. 100 = $1)
+  whiteTimeRemaining Int      @default(600000) @map("white_time_remaining") // ms, 10 min
+  blackTimeRemaining Int      @default(600000) @map("black_time_remaining")
+  turnStartedAt      DateTime @default(now()) @map("turn_started_at")
+  moves              String?  // JSON array of SAN moves e.g. ["e4","e5","Nf3"]
+  drawOfferBy        String?  @map("draw_offer_by")   // userId who offered draw, null if none
+  chatStatus         String?  @default("none") @map("chat_status")  // "none" | "pending" | "accepted" | "declined"
+  chatInitiatedBy    String?  @map("chat_initiated_by")  // userId who requested chat
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+  whiteEloBefore    Int?     @map("white_elo_before")
+  blackEloBefore    Int?     @map("black_elo_before")
+  whiteEloAfter     Int?     @map("white_elo_after")
+  blackEloAfter     Int?     @map("black_elo_after")
+  whiteBalanceBeforeCents Int? @map("white_balance_before_cents")
+  blackBalanceBeforeCents Int? @map("black_balance_before_cents")
+
+  white   User         @relation("WhitePlayer", fields: [whiteId], references: [id])
+  black   User         @relation("BlackPlayer", fields: [blackId], references: [id])
+  reports GameReport[]
+
+  @@map("games")
+}
+
+model GameReport {
+  id         String   @id @default(cuid())
+  gameId     String   @map("game_id")
+  userId     String   @map("user_id")
+  message    String
+  status     String   @default("pending") // "pending", "in_review", "resolved", "dismissed"
+  adminNotes String?  @map("admin_notes")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  game Game @relation(fields: [gameId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("game_reports")
+}
+
+model LedgerEntry {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  amount      Int      // positivo = ingreso, negativo = gasto
+  type        String   // "deposit", "stake", "win", "refund"
+  gameId      String?  @map("game_id")
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("ledger_entries")
+}
+
+model GameChallenge {
+  id                String   @id @default(cuid())
+  challengerId      String   @map("challenger_id")
+  challengedId      String   @map("challenged_id")
+  initialStakeCents Int      @map("initial_stake_cents")
+  currentStakeCents Int      @map("current_stake_cents")
+  lastProposedBy    String   @map("last_proposed_by") // "challenger" | "challenged"
+  status            String   @map("status") // "pending_accept" | "pending_challenger" | "pending_challenged" | "accepted" | "rejected"
+  gameId            String?  @map("game_id")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  challenger User @relation("Challenger", fields: [challengerId], references: [id])
+  challenged User @relation("Challenged", fields: [challengedId], references: [id])
+
+  @@map("game_challenges")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  type      String   @map("type") // "challenge_received" | "challenge_rejected" | "challenge_counter_proposal" | "challenge_accepted"
+  title     String
+  message   String?
+  linkUrl   String?  @map("link_url")   // e.g. /jugar, /partida/xxx
+  challengeId String? @map("challenge_id")
+  gameId    String?  @map("game_id")
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}

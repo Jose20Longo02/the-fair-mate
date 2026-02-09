@@ -1,0 +1,10 @@
+# Environment and secrets (never commit)
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+
+# Dependencies and build (web has its own in web/.gitignore)
+node_modules/
