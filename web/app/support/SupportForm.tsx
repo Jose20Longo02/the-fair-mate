@@ -7,15 +7,37 @@ const BUTTON_BLUE = "#1e40af";
 export default function SupportForm() {
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+  const [error, setError] = useState("");
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    setError("");
     setSending(true);
-    // Placeholder: no backend yet. Simulate delay then show success.
-    setTimeout(() => {
-      setSending(false);
+
+    const form = e.currentTarget;
+    const name = (form.elements.namedItem("name") as HTMLInputElement).value.trim();
+    const email = (form.elements.namedItem("email") as HTMLInputElement).value.trim();
+    const message = (form.elements.namedItem("message") as HTMLTextAreaElement).value.trim();
+
+    try {
+      const res = await fetch("/api/support", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, message }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || "Something went wrong. Please try again.");
+        return;
+      }
+
       setSent(true);
-    }, 600);
+    } catch {
+      setError("Connection error. Please try again.");
+    } finally {
+      setSending(false);
+    }
   }
 
   const inputClass =
@@ -78,6 +100,11 @@ export default function SupportForm() {
           className={`mt-2 min-h-[120px] w-full resize-y rounded-lg border border-stone-600 bg-stone-700/80 px-4 py-3 text-base text-white placeholder-stone-500 transition focus:border-stone-500 focus:outline-none focus:ring-2 focus:ring-stone-500/30 sm:min-h-[140px] sm:px-5 sm:py-4`}
         />
       </div>
+      {error && (
+        <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+          {error}
+        </p>
+      )}
       <div className="w-full min-w-0 pt-1 sm:pt-2">
         <button
           type="submit"

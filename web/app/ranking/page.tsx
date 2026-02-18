@@ -1,7 +1,13 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 
 const PAGE_BG = "#252525";
+
+export const metadata: Metadata = {
+  title: "Ranking — FairMate",
+  description: "Leaderboard by ELO and earnings.",
+};
 const ACCENT_BLUE = "#1e40af";
 
 type SortBy = "elo" | "earnings";

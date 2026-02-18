@@ -1,9 +1,16 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import type { Metadata } from "next";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 const PAGE_BG = "#252525";
+
+export const metadata: Metadata = {
+  title: "My reports — FairMate",
+  description: "Track your result reports and our response.",
+};
+
 const BUTTON_BLUE = "#1e40af";
 
 const STATUS_LABELS: Record<string, { label: string; description: string; className: string }> = {

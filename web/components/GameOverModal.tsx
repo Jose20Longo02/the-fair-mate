@@ -1,9 +1,31 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import html2canvas from "html2canvas";
+import ShareGameImageCard from "@/components/ShareGameImageCard";
+import { getShareBgGrayscaleDataUrl } from "@/lib/share-bg-grayscale";
+import { PLATFORM_FEE_PERCENT } from "@/lib/commission";
 
 const BUTTON_BLUE = "#1e40af";
+
+function resultAndStatusLabels(
+  result: "win" | "loss" | "draw",
+  lossReason?: "timeout" | "checkmate" | "disconnected" | "resigned"
+): { resultLabel: string; statusLabel: string } {
+  if (result === "win") return { resultLabel: "Victory", statusLabel: "You won this game." };
+  if (result === "draw") return { resultLabel: "Draw", statusLabel: "Stakes are refunded." };
+  switch (lossReason) {
+    case "timeout":
+      return { resultLabel: "Out of time", statusLabel: "Your clock ran out." };
+    case "disconnected":
+      return { resultLabel: "Disconnected", statusLabel: "You didn't reconnect in time." };
+    case "resigned":
+      return { resultLabel: "You resigned", statusLabel: "Your opponent wins." };
+    default:
+      return { resultLabel: "Game over", statusLabel: "Good fight." };
+  }
+}
 
 export type GameOverModalProps = {
   result: "win" | "loss" | "draw";
@@ -21,6 +43,13 @@ export type GameOverModalProps = {
   onRematch?: () => void;
   onAcceptRematch?: () => void;
   onDeclineRematch?: () => void;
+  /** For share image */
+  fen?: string;
+  profitCents?: number;
+  whiteName?: string;
+  blackName?: string;
+  whiteElo?: number;
+  blackElo?: number;
 };
 
 export default function GameOverModal({
@@ -39,6 +68,12 @@ export default function GameOverModal({
   onRematch,
   onAcceptRematch,
   onDeclineRematch,
+  fen,
+  profitCents = 0,
+  whiteName = "White",
+  blackName = "Black",
+  whiteElo,
+  blackElo,
 }: GameOverModalProps) {
   const [mounted, setMounted] = useState(false);
   const [showReportForm, setShowReportForm] = useState(false);
@@ -46,7 +81,68 @@ export default function GameOverModal({
   const [reportLoading, setReportLoading] = useState(false);
   const [reportError, setReportError] = useState("");
   const [reportSent, setReportSent] = useState(false);
+  const [shareLoading, setShareLoading] = useState(false);
+  const shareCardRef = useRef<HTMLDivElement>(null);
   useEffect(() => setMounted(true), []);
+
+  const { resultLabel, statusLabel } = resultAndStatusLabels(result, lossReason);
+
+  async function handleShareImage() {
+    if (!shareCardRef.current || shareLoading) return;
+    setShareLoading(true);
+    try {
+      const grayscaleDataUrl = await getShareBgGrayscaleDataUrl();
+      const cardCanvas = await html2canvas(shareCardRef.current, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: null,
+        logging: false,
+        onclone(_, clonedNode) {
+          const img = clonedNode.querySelector<HTMLImageElement>('img[src*="share-bg-fluid"]');
+          if (img) {
+            img.style.display = "none";
+            if (img.parentElement) img.parentElement.style.backgroundColor = "transparent";
+          }
+          clonedNode.querySelectorAll("[data-share-glass]").forEach((el) => {
+            const div = el as HTMLElement;
+            div.style.backgroundColor = "rgba(28,25,23,0.75)";
+            div.style.backdropFilter = "none";
+            div.style.webkitBackdropFilter = "none";
+            div.style.boxShadow = "none";
+            div.style.border = "1px solid rgba(255,255,255,0.1)";
+          });
+        },
+      });
+      const w = cardCanvas.width;
+      const h = cardCanvas.height;
+      const bgImg = new Image();
+      await new Promise<void>((resolve, reject) => {
+        bgImg.onload = () => resolve();
+        bgImg.onerror = () => reject(new Error("Grayscale bg load failed"));
+        bgImg.src = grayscaleDataUrl;
+      });
+      const final = document.createElement("canvas");
+      final.width = w;
+      final.height = h;
+      const ctx = final.getContext("2d");
+      if (!ctx) throw new Error("Canvas 2d unavailable");
+      const scale = Math.max(w / bgImg.naturalWidth, h / bgImg.naturalHeight);
+      const sw = bgImg.naturalWidth;
+      const sh = bgImg.naturalHeight;
+      const dx = (w - sw * scale) / 2;
+      const dy = (h - sh * scale) / 2;
+      ctx.drawImage(bgImg, 0, 0, sw, sh, dx, dy, sw * scale, sh * scale);
+      ctx.drawImage(cardCanvas, 0, 0);
+      const link = document.createElement("a");
+      link.download = `fairmate-${result}-${Date.now()}.png`;
+      link.href = final.toDataURL("image/png");
+      link.click();
+    } catch {
+      // ignore
+    } finally {
+      setShareLoading(false);
+    }
+  }
 
   const formatStake = (cents: number) => `$${(cents / 100).toFixed(2)}`;
   const eloText = eloDelta >= 0 ? `+${eloDelta}` : String(eloDelta);
@@ -86,8 +182,30 @@ export default function GameOverModal({
       aria-modal="true"
       role="dialog"
     >
+      {/* Off-screen card for html2canvas capture */}
+      {fen && (
+        <div
+          className="fixed left-[-9999px] top-0 z-0"
+          aria-hidden
+          ref={shareCardRef}
+        >
+          <ShareGameImageCard
+            result={result}
+            resultLabel={resultLabel}
+            statusLabel={statusLabel}
+            fen={fen}
+            stakeCents={stake}
+            profitCents={profitCents}
+            eloDelta={eloDelta}
+            whiteName={whiteName}
+            blackName={blackName}
+            whiteElo={whiteElo}
+            blackElo={blackElo}
+          />
+        </div>
+      )}
       <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-200"
+        className="absolute inset-0 bg-black/60 transition-opacity duration-200"
         aria-hidden
         onClick={onClose}
       />
@@ -147,7 +265,7 @@ export default function GameOverModal({
                       : "font-medium text-stone-300"
                 }
               >
-                {result === "win" && `+${formatStake(Math.floor(stake * 2 * 0.95))}`}
+                {result === "win" && `+${formatStake(Math.floor(stake * 2 * (1 - PLATFORM_FEE_PERCENT)))}`}
                 {result === "loss" && `-${formatStake(stake)}`}
                 {result === "draw" && formatStake(stake) + " refunded"}
               </span>
@@ -157,6 +275,28 @@ export default function GameOverModal({
               <span className="font-medium text-stone-300">{eloText}</span>
             </div>
           </div>
+
+          {/* Share: download image */}
+          {fen && (
+            <button
+              type="button"
+              onClick={handleShareImage}
+              disabled={shareLoading}
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+              style={{ backgroundColor: "#059669" }}
+            >
+              {shareLoading ? (
+                "Preparing…"
+              ) : (
+                <>
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Share — Download image
+                </>
+              )}
+            </button>
+          )}
 
           {/* Rematch */}
           {onRematch && (

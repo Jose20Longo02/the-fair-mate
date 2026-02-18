@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-import { createSession, getCookieName } from "@/lib/auth";
+import { createSession, getCookieName, SESSION_COOKIE_OPTIONS } from "@/lib/auth";
 import { checkRateLimit, getClientKey } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
 import { isAllowedAvatar } from "@/lib/avatars";
+import { generateVerificationCode, sendVerificationEmail } from "@/lib/email";
 
 const MIN_PASSWORD_LENGTH = 8;
 const REGISTER_LIMIT = 5;
@@ -14,7 +15,7 @@ const ALLOWED_INITIAL_ELO = [400, 800, 1200, 1600] as const;
 export async function POST(request: Request) {
   const clientKey = getClientKey(request);
   const rateKey = `register:${clientKey}`;
-  const rate = checkRateLimit(rateKey, REGISTER_LIMIT, REGISTER_WINDOW_MS);
+  const rate = await checkRateLimit(rateKey, REGISTER_LIMIT, REGISTER_WINDOW_MS);
   if (!rate.ok) {
     return NextResponse.json(
       { error: `Too many registrations. Try again in ${rate.retryAfter} seconds.` },
@@ -83,6 +84,9 @@ export async function POST(request: Request) {
         : 1200;
 
     const passwordHash = await bcrypt.hash(password, 12);
+    const verificationCode = generateVerificationCode();
+    const verificationCodeExpiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
     const user = await prisma.user.create({
       data: {
         email: emailNorm,
@@ -90,22 +94,27 @@ export async function POST(request: Request) {
         name: nameTrimmed || null,
         avatar,
         elo: initialElo,
+        verificationCode,
+        verificationCodeExpiresAt,
       },
+    });
+
+    // Send verification email (non-blocking — don't fail registration if email fails)
+    sendVerificationEmail(user.email, verificationCode).then((result) => {
+      if (!result.success) {
+        logger.error("verification_email_failed", { userId: user.id, error: result.error });
+      } else {
+        logger.info("verification_email_sent", { userId: user.id });
+      }
     });
 
     const token = await createSession(user.id, user.email);
     logger.info("register_success", { userId: user.id, email: user.email });
 
     const res = NextResponse.json({
-      user: { id: user.id, email: user.email, name: user.name, elo: user.elo },
+      user: { id: user.id, email: user.email, name: user.name, elo: user.elo, emailVerified: false },
     });
-    res.cookies.set(getCookieName(), token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60,
-      path: "/",
-    });
+    res.cookies.set(getCookieName(), token, SESSION_COOKIE_OPTIONS);
     return res;
   } catch (e) {
     logger.error("register_error", { error: String(e) });

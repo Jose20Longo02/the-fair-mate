@@ -1,7 +1,13 @@
 import Image from "next/image";
+import type { Metadata } from "next";
 import ScrollToTop from "./ScrollToTop";
 
 const PAGE_BG = "#252525";
+
+export const metadata: Metadata = {
+  title: "Fair Play — FairMate",
+  description: "Skill-based matchmaking, fixed stakes, anti-abuse monitoring, consistent result handling.",
+};
 
 const FAIR_PLAY_ITEMS = [
   {

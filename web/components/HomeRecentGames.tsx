@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PLATFORM_FEE_PERCENT } from "@/lib/commission";
 
 type GameRow = {
   id: string;
@@ -14,11 +15,9 @@ type GameRow = {
   date: string;
 };
 
-/** Pot = 2 × stake. Platform takes 5%, winner gets 95%. Profit = winnerGets - stake. */
 function winnerProfitCents(stakeCents: number): number {
   const potCents = stakeCents * 2;
-  const platformFeePercent = 0.05;
-  const winnerGetsCents = Math.floor(potCents * (1 - platformFeePercent));
+  const winnerGetsCents = Math.floor(potCents * (1 - PLATFORM_FEE_PERCENT));
   return winnerGetsCents - stakeCents;
 }
 

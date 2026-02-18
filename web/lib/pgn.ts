@@ -19,8 +19,8 @@ export function buildPgn(options: {
   const dateStr = `${year}.${month}.${day}`;
 
   const headers = [
-    '[Event "Stakes Chess Game"]',
-    '[Site "Stakes Chess"]',
+    '[Event "FairMate Game"]',
+    '[Site "FairMate"]',
     `[Date "${dateStr}"]`,
     `[White "${escape(whiteName)}"]`,
     `[Black "${escape(blackName)}"]`,

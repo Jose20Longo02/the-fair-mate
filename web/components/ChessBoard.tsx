@@ -9,9 +9,14 @@ import { Chessboard } from "react-chessboard";
 import GameActions from "@/components/GameActions";
 import GameSummarySection from "@/components/GameSummarySection";
 import GameOverModal from "@/components/GameOverModal";
+import { getWsToken, wsUrlWithToken } from "@/lib/ws-auth";
+import { PLATFORM_FEE_PERCENT } from "@/lib/commission";
 
 const WS_URL = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:3002") : "";
+const WS_BASE = typeof window !== "undefined" ? (WS_URL.startsWith("http") ? WS_URL.replace(/^http/, "ws") : WS_URL).split("?")[0].replace(/\/$/, "") : "";
 const RECONNECT_DEADLINE_MS = 60 * 1000; // 1 minute to reconnect (must match WS server)
+const SETTLEMENT_OVERLAY_MIN_MS = 3000; // mínimo tiempo mostrando "Acreditando fondos" / "Actualizando banca"
+const CHECKMATE_REVEAL_MS = 2800; // tiempo mostrando la casilla del rey en rojo antes del modal
 const BUTTON_BLUE = "#1e40af";
 
 const PIECE_VALUE: Record<string, number> = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
@@ -115,6 +120,11 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
   const [error, setError] = useState<string | null>(null);
   const [gameOverPayload, setGameOverPayload] = useState<GameOverPayload | null>(null);
   const [showGameOverModal, setShowGameOverModal] = useState(false);
+  const [checkmateKingSquare, setCheckmateKingSquare] = useState<string | null>(null);
+  const [settlementPending, setSettlementPending] = useState<null | "acreditando" | "actualizando">(null);
+  const settlementPendingShownAtRef = useRef<number | null>(null);
+  const checkmateRevealScheduledRef = useRef(false);
+  const gameOverPayloadFromServerRef = useRef<GameOverPayload | null>(null);
   const [moving, setMoving] = useState(false);
   const [tick, setTick] = useState(0);
   const [presence, setPresence] = useState<PresenceState | null>(null);
@@ -125,6 +135,14 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
   const [pendingPromotion, setPendingPromotion] = useState<{ from: string; to: string } | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const refetchOnDisconnectZeroRef = useRef(false);
+  const cleanupRanRef = useRef(false);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const keepaliveIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const wsSeqRef = useRef(0);
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
+  const gameStatusRef = useRef<string | null>(null);
+  gameStatusRef.current = game?.status ?? null;
 
   // Live clocks: tick every second when game is active
   useEffect(() => {
@@ -133,13 +151,13 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
     return () => clearInterval(interval);
   }, [game?.id, game?.status]);
 
-  const fetchGame = useCallback(async () => {
+  const fetchGame = useCallback(async (isRefetch = false) => {
     try {
       const res = await fetch(`/api/games/${gameId}`);
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         setError(data.error || "Failed to load game");
-        setGame(null);
+        if (!isRefetch) setGame(null);
         return;
       }
       const data = await res.json();
@@ -147,7 +165,7 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
       setError(null);
     } catch {
       setError("Connection error");
-      setGame(null);
+      if (!isRefetch) setGame(null);
     } finally {
       setLoading(false);
     }
@@ -157,21 +175,80 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
     fetchGame();
   }, [fetchGame]);
 
-  // WebSocket: connect to game room when we have a game (stay connected after game ends for rematch)
+  // Cuando el contador de reconexión llega a 0, refetch tras 2.5s por si el forfeit se aplicó (cron/timer) y el WS no llegó
   useEffect(() => {
-    if (!game?.id) return;
+    if (!game || game.status !== "active" || !presence) return;
+    const isPlayerWhite = game.whiteId === userId;
+    const opponentKey = isPlayerWhite ? "black" : "white";
+    const opponentConnected = opponentKey === "black" ? presence.blackConnected : presence.whiteConnected;
+    const started = presence.disconnectStartedAt?.[opponentKey];
+    if (opponentConnected || started == null) {
+      refetchOnDisconnectZeroRef.current = false;
+      return;
+    }
+    const deadline = started + RECONNECT_DEADLINE_MS;
+    const check = () => {
+      if (Date.now() < deadline || refetchOnDisconnectZeroRef.current) return;
+      refetchOnDisconnectZeroRef.current = true;
+      setTimeout(() => fetchGame(true), 2500);
+    };
+    check();
+    const interval = setInterval(check, 1000);
+    return () => clearInterval(interval);
+  }, [game?.id, game?.status, presence, userId, fetchGame]);
+
+  // WebSocket: connect to game room when we have a game (stay connected after game ends for rematch). Reconnect automatically if socket closes during active game.
+  useEffect(() => {
+    if (!game?.id || !WS_BASE) return;
+    cleanupRanRef.current = false;
+    const wsSeq = ++wsSeqRef.current;
     const whiteId = game.whiteId;
     const blackId = game.blackId;
-    const base = WS_URL.replace(/^http/, "ws");
-    const wsUrl = `${base.split("?")[0].replace(/\/$/, "")}?gameId=${encodeURIComponent(gameId)}`;
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      ws.send(JSON.stringify({ type: "joinGame", userId, whiteId, blackId }));
+    const gameIdParam = `gameId=${encodeURIComponent(gameId)}`;
+    let cancelled = false;
+    const scheduleReconnect = () => {
+      if (cleanupRanRef.current || cancelled) return;
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = setTimeout(() => {
+        reconnectTimeoutRef.current = null;
+        setReconnectAttempt((a) => a + 1);
+      }, 2000);
     };
 
-    ws.onmessage = (event) => {
+    (async () => {
+      const token = await getWsToken();
+      if (cancelled) return;
+      if (!token) {
+        // Important: a transient ws-token failure must not kill reconnection forever.
+        // Keep retrying while game remains active.
+        console.warn("[FairMate WS] token missing, scheduling reconnect", {
+          gameId,
+          userId,
+          wsSeq,
+          reconnectAttempt,
+        });
+        if (gameStatusRef.current === "active") scheduleReconnect();
+        return;
+      }
+      const url = wsUrlWithToken(`${WS_BASE}?${gameIdParam}`, token);
+      if (cancelled) return;
+      const ws = new WebSocket(url);
+      (ws as WebSocket & { __intentionalClose?: boolean; __seq?: number }).__intentionalClose = false;
+      (ws as WebSocket & { __intentionalClose?: boolean; __seq?: number }).__seq = wsSeq;
+      wsRef.current = ws;
+      console.log("[FairMate WS] opening game socket", { gameId, userId, wsSeq, reconnectAttempt });
+
+      ws.onopen = () => {
+        console.log("[FairMate WS] game socket open", { gameId, userId, wsSeq });
+        ws.send(JSON.stringify({ type: "joinGame", userId, whiteId, blackId }));
+        // Keepalive every 10s — 1001/1005 often from browser suspending tab or proxy; frequent pings reduce "idle" perception.
+        if (keepaliveIntervalRef.current) clearInterval(keepaliveIntervalRef.current);
+        keepaliveIntervalRef.current = setInterval(() => {
+          if (ws.readyState === 1) ws.send(JSON.stringify({ type: "ping" }));
+        }, 10000);
+      };
+
+      ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data as string);
         if (msg.type === "gameUpdate" && msg.game) {
@@ -204,20 +281,61 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
           });
           if (msg.gameOver) {
             setGameOverPayload(msg.gameOver);
-            setShowGameOverModal(true);
             setRematchRequestedByMe(false);
             setRematchRequestedByOpponent(false);
             setRematchDeclined(false);
             setRematchError(null);
-            if (typeof window !== "undefined") window.scrollTo(0, 0);
-            router.refresh();
+            const weWon = msg.gameOver.winnerId === userId;
+            const weLost = msg.gameOver.winnerId && msg.gameOver.winnerId !== userId;
+            const updates = msg.game || {};
+            const isCheckmate = updates.status === "checkmate" && updates.fen;
+            let checkmateKingSquareFromUpdate: string | null = null;
+            if (isCheckmate && updates.fen) {
+              try {
+                const chess = new Chess(updates.fen);
+                const cell = chess.board().flat().find((p) => p?.type === "k" && p.color === chess.turn());
+                if (cell) checkmateKingSquareFromUpdate = cell.square;
+              } catch {}
+            }
+            if (checkmateKingSquareFromUpdate) {
+              setCheckmateKingSquare(checkmateKingSquareFromUpdate);
+              setTimeout(() => {
+                setCheckmateKingSquare(null);
+                setShowGameOverModal(true);
+                if (weWon || weLost) {
+                  settlementPendingShownAtRef.current = Date.now();
+                  setSettlementPending(weWon ? "acreditando" : "actualizando");
+                  setTimeout(() => {
+                    settlementPendingShownAtRef.current = null;
+                    setSettlementPending(null);
+                  }, SETTLEMENT_OVERLAY_MIN_MS);
+                }
+                if (typeof window !== "undefined") window.scrollTo(0, 0);
+                router.refresh();
+              }, CHECKMATE_REVEAL_MS);
+            } else {
+              setShowGameOverModal(true);
+              if (weWon || weLost) {
+                settlementPendingShownAtRef.current = Date.now();
+                setSettlementPending(weWon ? "acreditando" : "actualizando");
+                setTimeout(() => {
+                  settlementPendingShownAtRef.current = null;
+                  setSettlementPending(null);
+                }, SETTLEMENT_OVERLAY_MIN_MS);
+              }
+              if (typeof window !== "undefined") window.scrollTo(0, 0);
+              router.refresh();
+            }
           }
         }
         if (msg.type === "presence") {
+          const whiteConnected = !!msg.whiteConnected;
+          const blackConnected = !!msg.blackConnected;
           setPresence({
-            whiteConnected: !!msg.whiteConnected,
-            blackConnected: !!msg.blackConnected,
-            disconnectStartedAt: msg.disconnectStartedAt || {},
+            whiteConnected,
+            blackConnected,
+            disconnectStartedAt:
+              whiteConnected && blackConnected ? {} : (msg.disconnectStartedAt || {}),
           });
         }
         if (msg.type === "rematchRequest" && msg.requestedBy !== userId) {
@@ -266,10 +384,63 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
           );
         }
       } catch {}
-    };
+      };
+
+      ws.onclose = (event) => {
+        const meta = ws as WebSocket & { __intentionalClose?: boolean; __seq?: number };
+        const intentional = !!meta.__intentionalClose;
+        if (gameStatusRef.current === "active") {
+          console.warn(
+            "[FairMate WS] Game socket closed — code:",
+            event.code,
+            "reason:",
+            event.reason || "(none)",
+            "— 1006 = red/proxy, 1001 = tab closed. Reconnecting in 2s…"
+          );
+          console.warn("[FairMate WS] close metadata", {
+            gameId,
+            userId,
+            wsSeq: meta.__seq,
+            intentional,
+            cleanupRan: cleanupRanRef.current,
+            reconnectAttempt,
+          });
+        }
+        wsRef.current = null;
+        setPresence(null);
+        setRematchRequestedByMe(false);
+        setRematchRequestedByOpponent(false);
+        setRematchDeclined(false);
+        setRematchError(null);
+        if (cleanupRanRef.current) return;
+        if (gameStatusRef.current === "active") {
+          scheduleReconnect();
+        }
+      };
+    })();
 
     return () => {
-      ws.close();
+      cancelled = true;
+      cleanupRanRef.current = true;
+      console.log("[FairMate WS] effect cleanup", {
+        gameId,
+        userId,
+        wsSeq,
+        reconnectAttempt,
+        hasSocket: !!wsRef.current,
+      });
+      if (keepaliveIntervalRef.current) {
+        clearInterval(keepaliveIntervalRef.current);
+        keepaliveIntervalRef.current = null;
+      }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+      if (wsRef.current) {
+        (wsRef.current as WebSocket & { __intentionalClose?: boolean }).__intentionalClose = true;
+        wsRef.current.close();
+      }
       wsRef.current = null;
       setPresence(null);
       setRematchRequestedByMe(false);
@@ -277,7 +448,7 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
       setRematchDeclined(false);
       setRematchError(null);
     };
-  }, [gameId, userId, game?.id]);
+  }, [gameId, userId, game?.id, reconnectAttempt]);
 
   const handleGameUpdate = useCallback(
     (updates: { drawOfferBy?: string | null; chatStatus?: string | null; chatInitiatedBy?: string | null }) => {
@@ -322,14 +493,81 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
       const newMovesJson = game.moves
         ? JSON.stringify([...JSON.parse(game.moves), move.san])
         : JSON.stringify([move.san]);
-      setGame((prev) =>
-        prev
-          ? { ...prev, fen: chess.fen(), turn: chess.turn(), moves: newMovesJson }
-          : prev
-      );
+      const gameEnded = chess.isCheckmate() || chess.isStalemate() || chess.isGameOver();
+      const isDraw = chess.isStalemate() || chess.isDraw();
+      const isCheckmate = chess.isCheckmate();
+      setGame((prev) => {
+        if (!prev) return prev;
+        const next = { ...prev, fen: chess.fen(), turn: chess.turn(), moves: newMovesJson };
+        if (isCheckmate) {
+          next.status = "checkmate";
+          next.winner = userId;
+        } else if (isDraw) {
+          next.status = chess.isStalemate() ? "stalemate" : "draw";
+          next.winner = null;
+        }
+        return next;
+      });
       setSelectedSquare(null);
       setPendingPromotion(null);
       setMoving(true);
+
+      if (gameEnded) {
+        if (isCheckmate) {
+          const loserKingSquare = (() => {
+            const board = chess.board();
+            const turn = chess.turn();
+            const cell = board.flat().find((p) => p?.type === "k" && p.color === turn);
+            return cell?.square ?? null;
+          })();
+          if (loserKingSquare) {
+            setCheckmateKingSquare(loserKingSquare);
+            checkmateRevealScheduledRef.current = true;
+            setTimeout(() => {
+              checkmateRevealScheduledRef.current = false;
+              setCheckmateKingSquare(null);
+              setGameOverPayload(
+                gameOverPayloadFromServerRef.current ?? {
+                  winnerId: userId,
+                  stake: game.stake,
+                  eloWhiteDelta: 0,
+                  eloBlackDelta: 0,
+                  isDraw: false,
+                }
+              );
+              setShowGameOverModal(true);
+              settlementPendingShownAtRef.current = Date.now();
+              setSettlementPending("acreditando");
+              if (typeof window !== "undefined") window.scrollTo(0, 0);
+            }, CHECKMATE_REVEAL_MS);
+          } else {
+            setGameOverPayload({
+              winnerId: userId,
+              stake: game.stake,
+              eloWhiteDelta: 0,
+              eloBlackDelta: 0,
+              isDraw: false,
+            });
+            setShowGameOverModal(true);
+            settlementPendingShownAtRef.current = Date.now();
+            setSettlementPending("acreditando");
+            if (typeof window !== "undefined") window.scrollTo(0, 0);
+          }
+        } else {
+          setGameOverPayload({
+            winnerId: isDraw ? null : userId,
+            stake: game.stake,
+            eloWhiteDelta: 0,
+            eloBlackDelta: 0,
+            isDraw: !!isDraw,
+          });
+          setShowGameOverModal(true);
+          settlementPendingShownAtRef.current = Date.now();
+          setSettlementPending("acreditando");
+          if (typeof window !== "undefined") window.scrollTo(0, 0);
+        }
+      }
+
       fetch(`/api/games/${gameId}/move`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -337,25 +575,55 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
       })
         .then((res) => res.json())
         .then((data) => {
-          if (data.error) {
+            if (data.error) {
             setGame((prev) =>
-              prev ? { ...prev, fen: prevFen, turn: prevTurn, moves: prevMoves } : prev
+              prev ? { ...prev, fen: prevFen, turn: prevTurn, moves: prevMoves, status: "active", winner: null } : prev
             );
+            if (gameEnded) {
+              checkmateRevealScheduledRef.current = false;
+              setCheckmateKingSquare(null);
+              setShowGameOverModal(false);
+              settlementPendingShownAtRef.current = null;
+              setSettlementPending(null);
+            }
             alert(data.error);
           } else if (data.game) {
             setGame((prev) => (prev ? { ...prev, ...data.game } : data.game));
             if (data.gameOver) {
-              setGameOverPayload(data.gameOver);
-              setShowGameOverModal(true);
-              if (typeof window !== "undefined") window.scrollTo(0, 0);
+              gameOverPayloadFromServerRef.current = data.gameOver;
+              if (!checkmateRevealScheduledRef.current) {
+                setGameOverPayload(data.gameOver);
+                setShowGameOverModal(true);
+                settlementPendingShownAtRef.current = Date.now();
+                setSettlementPending("acreditando");
+                const shownAt = settlementPendingShownAtRef.current;
+                const remaining = shownAt != null ? SETTLEMENT_OVERLAY_MIN_MS - (Date.now() - shownAt) : 0;
+                if (remaining <= 0) {
+                  settlementPendingShownAtRef.current = null;
+                  setSettlementPending(null);
+                } else {
+                  setTimeout(() => {
+                    settlementPendingShownAtRef.current = null;
+                    setSettlementPending(null);
+                  }, remaining);
+                }
+                if (typeof window !== "undefined") window.scrollTo(0, 0);
+              }
               router.refresh();
             }
           }
         })
         .catch(() => {
           setGame((prev) =>
-            prev ? { ...prev, fen: prevFen, turn: prevTurn, moves: prevMoves } : prev
+            prev ? { ...prev, fen: prevFen, turn: prevTurn, moves: prevMoves, status: "active", winner: null } : prev
           );
+          if (gameEnded) {
+            checkmateRevealScheduledRef.current = false;
+            setCheckmateKingSquare(null);
+            setShowGameOverModal(false);
+            settlementPendingShownAtRef.current = null;
+            setSettlementPending(null);
+          }
           alert("Move failed");
         })
         .finally(() => setMoving(false));
@@ -430,6 +698,8 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
   const opponentName = opponent.name || opponent.email.split("@")[0];
   const userName = (isPlayerWhite ? game.white : game.black).name || (isPlayerWhite ? game.white : game.black).email.split("@")[0];
   const isGameActive = game.status === "active";
+  const showGameView = isGameActive || !!checkmateKingSquare;
+  const showSummaryView = !showGameView;
   const boardOrientation = isPlayerWhite ? "white" : "black";
 
   const now = typeof window !== "undefined" ? Date.now() : 0;
@@ -538,15 +808,25 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
   const checkSquareStyle = inCheckSquare
     ? { [inCheckSquare]: { boxShadow: "inset 0 0 0 3px rgba(239, 68, 68, 0.9)" } }
     : {};
+  const checkmateKingSquareStyle = checkmateKingSquare
+    ? {
+        [checkmateKingSquare]: {
+          boxShadow: "inset 0 0 0 4px rgba(220, 38, 38, 1)",
+          backgroundColor: "rgba(220, 38, 38, 0.45)",
+          animation: "checkmate-pulse 0.6s ease-in-out infinite alternate",
+        },
+      }
+    : {};
 
   const squareStyles: Record<string, object> = {
     ...lastMoveSquares,
     ...selectedSquareStyle,
     ...checkSquareStyle,
+    ...checkmateKingSquareStyle,
   };
 
   const stakeDollars = (game.stake / 100).toFixed(2);
-  const winAfterCommission = Math.floor((game.stake * 2 * 95) / 100) / 100;
+  const winAfterCommission = Math.floor(game.stake * 2 * (1 - PLATFORM_FEE_PERCENT)) / 100;
   const winDollars = winAfterCommission.toFixed(2);
 
   const whiteDisconnectStarted = presence?.disconnectStartedAt?.white;
@@ -600,8 +880,8 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
         ) : null;
       })()}
 
-      {/* Partida en curso: tablero + sidebar (moves + actions) */}
-      {isGameActive && (
+      {/* Partida en curso (o animación de jaque mate): tablero + sidebar */}
+      {showGameView && (
         <div className="grid w-full grid-cols-1 grid-rows-[auto_auto] gap-4 md:grid-cols-[1fr_280px] md:gap-6 md:grid-rows-1 md:items-stretch">
           {/* ——— Game table: White | board | Black ——— */}
           <div className="flex min-w-0 flex-col rounded-xl border-2 border-stone-600/80 bg-gradient-to-b from-stone-800/95 to-stone-900/95 p-3 shadow-xl sm:rounded-2xl sm:p-5 sm:shadow-2xl">
@@ -645,8 +925,14 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
             {/* Turn / Check (band above board) */}
             <div className="border-x border-stone-600/80 bg-stone-900/80 py-1.5 text-center sm:py-1.5">
               <span className="text-xs font-semibold uppercase tracking-wider text-stone-400">
-                {inCheckSquare ? <span className="text-red-400">Check! — </span> : null}
-                {game.turn === "w" ? "White" : "Black"} to move
+                {checkmateKingSquare ? (
+                  <span className="text-red-400">Checkmate!</span>
+                ) : (
+                  <>
+                    {inCheckSquare ? <span className="text-red-400">Check! — </span> : null}
+                    {game.turn === "w" ? "White" : "Black"} to move
+                  </>
+                )}
               </span>
             </div>
 
@@ -767,8 +1053,8 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
         </div>
       )}
 
-      {/* Vista de resumen (solo cuando la partida terminó): Back to home, Summary, Movimientos, Tablero */}
-      {!isGameActive && (
+      {/* Vista de resumen (después de asimilar el jaque mate o cuando la partida terminó sin checkmate): Back to home, Summary, Movimientos, Tablero */}
+      {showSummaryView && (
         <>
           <Link
             href="/"
@@ -892,13 +1178,42 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
         </div>
       )}
 
+      {settlementPending && (
+        <div
+          className="fixed inset-0 z-[60] flex flex-col items-center justify-center gap-4 bg-black/70 backdrop-blur-sm"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-stone-500 border-t-white" />
+          <p className="text-center text-lg font-medium text-white">
+            {settlementPending === "acreditando" ? "Acreditando fondos…" : "Actualizando banca…"}
+          </p>
+        </div>
+      )}
+
       {showGameOverModal && gameOverPayload && (
         <GameOverModal
           result={result}
           stake={game.stake}
           eloDelta={eloDelta}
+          fen={game.fen}
+          profitCents={
+            result === "win"
+              ? Math.floor(game.stake * 2 * (1 - PLATFORM_FEE_PERCENT)) - game.stake
+              : result === "loss"
+                ? -game.stake
+                : 0
+          }
+          whiteName={whiteName}
+          blackName={blackName}
+          whiteElo={game.white.elo}
+          blackElo={game.black.elo}
           onClose={() => {
             setShowGameOverModal(false);
+            setCheckmateKingSquare(null);
+            settlementPendingShownAtRef.current = null;
+            setSettlementPending(null);
+            gameOverPayloadFromServerRef.current = null;
             setRematchRequestedByMe(false);
             setRematchRequestedByOpponent(false);
             setRematchDeclined(false);

@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useCallback } from "react";
+import { usePathname } from "next/navigation";
 import { avatarUrl } from "@/lib/avatars";
 import DepositButton from "./DepositButton";
 import NotificationBell from "./NotificationBell";
@@ -10,6 +11,7 @@ import LogoutButton from "./LogoutButton";
 
 const HEADER_BG = "#212121";
 const BUTTON_BLUE = "#1e40af";
+const BALANCE_POLL_MS = 5000;
 
 type Session = { userId: string; email: string } | null;
 
@@ -25,7 +27,27 @@ export default function HeaderNav({
   const formatBalance = (cents: number) => `$${(cents / 100).toFixed(2)}`;
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   const [hamburgerOpen, setHamburgerOpen] = useState(false);
+  const [liveBalanceCents, setLiveBalanceCents] = useState<number | null>(balanceCents);
   const avatarMenuRef = useRef<HTMLDivElement>(null);
+  const pathname = usePathname();
+
+  useEffect(() => {
+    setLiveBalanceCents(balanceCents);
+  }, [balanceCents]);
+
+  const refreshBalance = useCallback(async () => {
+    if (!session) return;
+    try {
+      const res = await fetch("/api/account/balance", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = (await res.json()) as { balance?: number };
+      if (typeof data.balance === "number") {
+        setLiveBalanceCents(data.balance);
+      }
+    } catch {
+      // ignore transient UI refresh failures
+    }
+  }, [session]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -47,6 +69,18 @@ export default function HeaderNav({
       document.body.style.overflow = "";
     };
   }, [hamburgerOpen]);
+
+  // Keep header balance fresh without manual reload:
+  // - immediate refresh on route changes (e.g. entering /partida/*)
+  // - short polling while user is logged in
+  useEffect(() => {
+    if (!session) return;
+    void refreshBalance();
+    const id = setInterval(() => {
+      void refreshBalance();
+    }, BALANCE_POLL_MS);
+    return () => clearInterval(id);
+  }, [session, pathname, refreshBalance]);
 
   const closeHamburger = () => setHamburgerOpen(false);
 
@@ -97,6 +131,13 @@ export default function HeaderNav({
         My account
       </Link>
       <Link
+        href="/cuenta"
+        className="block py-3 text-base font-medium text-white transition hover:opacity-90"
+        onClick={closeHamburger}
+      >
+        Withdraw
+      </Link>
+      <Link
         href="/cuenta/notificaciones"
         className="block py-3 text-base font-medium text-white transition hover:opacity-90"
         onClick={closeHamburger}
@@ -130,10 +171,17 @@ export default function HeaderNav({
         <div className="flex items-center gap-14 sm:gap-16 md:gap-20">
           <Link
             href="/"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md transition hover:opacity-90 sm:h-10 sm:w-10"
-            style={{ backgroundColor: BUTTON_BLUE }}
+            className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md transition hover:opacity-90 sm:h-10 sm:w-10"
             aria-label="Home"
-          />
+          >
+            <Image
+              src="/images/FairMate Logo.jpg"
+              alt="FairMate"
+              width={40}
+              height={40}
+              className="h-full w-full object-contain"
+            />
+          </Link>
           <div className="hidden md:flex md:items-center md:gap-14 md:gap-16 lg:gap-20">
             {!session && (
               <>
@@ -159,7 +207,7 @@ export default function HeaderNav({
           {session ? (
             <>
               <NotificationBell userId={session.userId} />
-              {balanceCents !== null && (
+              {liveBalanceCents !== null && (
                 <div className="flex flex-col items-center text-center">
                   <span
                     className="font-sans text-xs font-normal tracking-wider"
@@ -168,7 +216,7 @@ export default function HeaderNav({
                     Balance
                   </span>
                   <span className="text-sm font-semibold tabular-nums text-white sm:text-base">
-                    {formatBalance(balanceCents)}
+                    {formatBalance(liveBalanceCents)}
                   </span>
                 </div>
               )}
@@ -237,6 +285,14 @@ export default function HeaderNav({
                       onClick={() => setAvatarMenuOpen(false)}
                     >
                       My account
+                    </Link>
+                    <Link
+                      href="/cuenta"
+                      className="block px-4 py-2.5 text-sm font-medium text-white transition hover:bg-stone-700"
+                      role="menuitem"
+                      onClick={() => setAvatarMenuOpen(false)}
+                    >
+                      Withdraw
                     </Link>
                     <Link
                       href="/cuenta/notificaciones"
@@ -315,11 +371,18 @@ export default function HeaderNav({
           <div className="flex items-center justify-between">
             <Link
               href="/"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md transition hover:opacity-90"
-              style={{ backgroundColor: BUTTON_BLUE }}
+              className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md transition hover:opacity-90"
               aria-label="Home"
               onClick={closeHamburger}
-            />
+            >
+              <Image
+                src="/images/FairMate Logo.jpg"
+                alt="FairMate"
+                width={40}
+                height={40}
+                className="h-full w-full object-contain"
+              />
+            </Link>
             <button
               type="button"
               onClick={closeHamburger}

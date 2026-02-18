@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { getWsToken, wsUrlWithToken } from "@/lib/ws-auth";
 
 type Notification = {
   id: string;
@@ -32,6 +33,7 @@ export default function NotificationBell({ userId }: { userId: string }) {
   const [mounted, setMounted] = useState(false);
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -63,40 +65,46 @@ export default function NotificationBell({ userId }: { userId: string }) {
   }, []);
 
   useEffect(() => {
-    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:3002";
-    const ws = new WebSocket(wsUrl);
-    ws.onopen = () => {
-      ws.send(JSON.stringify({ type: "presence", userId }));
-    };
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === "notificationNew" && data.notification) {
-          setToast({
-            id: data.notification.id,
-            title: data.notification.title,
-            message: data.notification.message ?? null,
-            linkUrl: data.notification.linkUrl ?? null,
-          });
-          fetchNotifications();
-          if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
-          toastTimeoutRef.current = setTimeout(() => setToast(null), 6000);
+    (async () => {
+      const token = await getWsToken();
+      if (!token) return;
+      const base = (process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:3002").replace(/^http/, "ws");
+      const ws = new WebSocket(wsUrlWithToken(base, token));
+      wsRef.current = ws;
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ type: "presence", userId }));
+      };
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === "notificationNew" && data.notification) {
+            setToast({
+              id: data.notification.id,
+              title: data.notification.title,
+              message: data.notification.message ?? null,
+              linkUrl: data.notification.linkUrl ?? null,
+            });
+            fetchNotifications();
+            if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+            toastTimeoutRef.current = setTimeout(() => setToast(null), 6000);
+          }
+          if (data.type === "challengeUpdated") {
+            window.dispatchEvent(new CustomEvent("challenge-updated"));
+          }
+          if (data.type === "challengeAccepted" && data.gameId) {
+            router.push(`/partida/${data.gameId}`);
+          }
+        } catch (e) {
+          console.error("[NotificationBell] Error processing WS message:", e);
         }
-        if (data.type === "challengeUpdated") {
-          window.dispatchEvent(new CustomEvent("challenge-updated"));
-        }
-        if (data.type === "challengeAccepted" && data.gameId) {
-          router.push(`/partida/${data.gameId}`);
-        }
-      } catch (e) {
-        console.error("[NotificationBell] Error processing WS message:", e);
-      }
-    };
-    ws.onerror = () => {
-      // WebSocket may be unavailable (e.g. server not running); notifications still work via HTTP polling
-    };
+      };
+      ws.onerror = () => {
+        // WebSocket may be unavailable (e.g. server not running); notifications still work via HTTP polling
+      };
+    })();
     return () => {
-      ws.close();
+      wsRef.current?.close();
+      wsRef.current = null;
       if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
     };
   }, [userId, router]);

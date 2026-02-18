@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { getWsToken, wsUrlWithToken } from "@/lib/ws-auth";
 
 const STAKES = [
   { label: "$1", cents: 100 },
@@ -24,12 +25,20 @@ export default function MatchmakingPanel({ userId }: { userId: string }) {
     };
   }, []);
 
-  function joinQueue(stake: number) {
+  async function joinQueue(stake: number) {
     setError("");
     setStatus("searching");
     matchedRef.current = false;
     searchingRef.current = true;
-    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:3002";
+    const token = await getWsToken();
+    if (!token) {
+      searchingRef.current = false;
+      setStatus("error");
+      setError("Please log in to play.");
+      return;
+    }
+    const base = (process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:3002").replace(/^http/, "ws");
+    const wsUrl = wsUrlWithToken(base, token);
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 

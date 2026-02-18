@@ -76,20 +76,20 @@ export default function AdminGamesPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">Historial de partidas</h1>
-      <p className="mt-2 text-stone-400">Últimas partidas con filtros. 20 por página.</p>
+      <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">Game history</h1>
+      <p className="mt-2 text-stone-400">Latest games with filters. 20 per page.</p>
 
       <div className="mt-6 rounded-xl border border-stone-600/80 bg-stone-800/80 p-4 sm:p-5">
-        <h2 className="mb-3 text-sm font-semibold text-white">Filtros</h2>
+        <h2 className="mb-3 text-sm font-semibold text-white">Filters</h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6">
           <div>
-            <label className={labelClass}>Usuario</label>
+            <label className={labelClass}>User</label>
             <select
               value={filters.userId}
               onChange={(e) => setFilters((f) => ({ ...f, userId: e.target.value }))}
               className={inputClass}
             >
-              <option value="">Todos</option>
+              <option value="">All</option>
               {users.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.name || u.email}
@@ -98,30 +98,30 @@ export default function AdminGamesPage() {
             </select>
           </div>
           <div>
-            <label className={labelClass}>ID partida</label>
+            <label className={labelClass}>Game ID</label>
             <input
               type="text"
-              placeholder="Ej. clxxx..."
+              placeholder="e.g. clxxx..."
               value={filters.gameId}
               onChange={(e) => setFilters((f) => ({ ...f, gameId: e.target.value }))}
               className={`${inputClass} font-mono`}
             />
           </div>
           <div>
-            <label className={labelClass}>Estado</label>
+            <label className={labelClass}>Status</label>
             <select
               value={filters.status}
               onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
               className={inputClass}
             >
-              <option value="">Todos</option>
+              <option value="">All</option>
               {STATUS_OPTIONS.map((s) => (
                 <option key={s} value={s}>{s}</option>
               ))}
             </select>
           </div>
           <div>
-            <label className={labelClass}>Desde</label>
+            <label className={labelClass}>From</label>
             <input
               type="date"
               value={filters.from}
@@ -130,7 +130,7 @@ export default function AdminGamesPage() {
             />
           </div>
           <div>
-            <label className={labelClass}>Hasta</label>
+            <label className={labelClass}>To</label>
             <input
               type="date"
               value={filters.to}
@@ -145,7 +145,7 @@ export default function AdminGamesPage() {
               className="w-full rounded-lg px-4 py-2.5 text-sm font-medium text-white transition hover:opacity-90 sm:w-auto"
               style={{ backgroundColor: BUTTON_BLUE }}
             >
-              Buscar
+              Search
             </button>
             <button
               type="button"
@@ -156,7 +156,7 @@ export default function AdminGamesPage() {
               }}
               className="w-full rounded-lg border border-stone-600 px-4 py-2.5 text-sm font-medium text-stone-300 transition hover:bg-stone-700 sm:w-auto"
             >
-              Limpiar
+              Clear
             </button>
           </div>
         </div>
@@ -164,20 +164,20 @@ export default function AdminGamesPage() {
 
       <div className="mt-6 overflow-x-auto rounded-xl border border-stone-600/80 bg-stone-800/80">
         {loading ? (
-          <p className="p-8 text-center text-stone-400">Cargando…</p>
+          <p className="p-8 text-center text-stone-400">Loading…</p>
         ) : games.length === 0 ? (
-          <p className="p-8 text-center text-stone-400">No hay partidas con estos filtros.</p>
+          <p className="p-8 text-center text-stone-400">No games match these filters.</p>
         ) : (
           <>
             <table className="min-w-full divide-y divide-stone-600/80 text-left text-sm">
               <thead className="bg-stone-700/50">
                 <tr>
-                  <th className="px-3 py-3 font-medium text-stone-300 sm:px-4">Fecha</th>
-                  <th className="px-3 py-3 font-medium text-stone-300 sm:px-4">Blancas</th>
-                  <th className="px-3 py-3 font-medium text-stone-300 sm:px-4">Negras</th>
-                  <th className="px-3 py-3 font-medium text-stone-300 sm:px-4">Stake</th>
-                  <th className="px-3 py-3 font-medium text-stone-300 sm:px-4">Estado</th>
-                  <th className="px-3 py-3 font-medium text-stone-300 sm:px-4">Acción</th>
+<th className="px-3 py-3 font-medium text-stone-300 sm:px-4">Date</th>
+                <th className="px-3 py-3 font-medium text-stone-300 sm:px-4">White</th>
+                <th className="px-3 py-3 font-medium text-stone-300 sm:px-4">Black</th>
+                <th className="px-3 py-3 font-medium text-stone-300 sm:px-4">Stake</th>
+                <th className="px-3 py-3 font-medium text-stone-300 sm:px-4">Status</th>
+                <th className="px-3 py-3 font-medium text-stone-300 sm:px-4">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-600/60">
@@ -203,7 +203,7 @@ export default function AdminGamesPage() {
                         href={`/admin/games/${g.id}`}
                         className="font-medium text-white underline decoration-stone-500 underline-offset-2 hover:decoration-white"
                       >
-                        Revisar partida
+                        Review game
                       </Link>
                     </td>
                   </tr>
@@ -213,7 +213,7 @@ export default function AdminGamesPage() {
             {total > LIMIT && (
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-stone-600/80 px-4 py-3">
                 <p className="text-sm text-stone-400">
-                  {total} partidas · Página {currentPage} de {totalPages}
+                  {total} games · Page {currentPage} of {totalPages}
                 </p>
                 <div className="flex gap-2">
                   <button
@@ -222,7 +222,7 @@ export default function AdminGamesPage() {
                     disabled={offset === 0}
                     className="rounded-lg border border-stone-600 px-3 py-1.5 text-sm text-stone-300 disabled:opacity-50 hover:bg-stone-700"
                   >
-                    Anterior
+                    Previous
                   </button>
                   <button
                     type="button"
@@ -230,7 +230,7 @@ export default function AdminGamesPage() {
                     disabled={offset + LIMIT >= total}
                     className="rounded-lg border border-stone-600 px-3 py-1.5 text-sm text-stone-300 disabled:opacity-50 hover:bg-stone-700"
                   >
-                    Siguiente
+                    Next
                   </button>
                 </div>
               </div>

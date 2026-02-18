@@ -7,6 +7,7 @@ import HomeChallengeCard from "@/components/HomeChallengeCard";
 import HomeChallengesSection from "@/components/HomeChallengesSection";
 import HomeRecentGames from "@/components/HomeRecentGames";
 import ScrollToMyChallenges from "@/components/ScrollToMyChallenges";
+import ReconnectGameModal from "@/components/ReconnectGameModal";
 
 const PAGE_BG = "#252525";
 const BUTTON_BLUE = "#1e40af";
@@ -48,7 +49,7 @@ export default async function Home() {
 
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
-    select: { id: true, name: true, elo: true, email: true },
+    select: { id: true, name: true, elo: true, email: true, balance: true, emailVerified: true },
   });
   if (!user) {
     return null;
@@ -109,8 +110,25 @@ export default async function Home() {
         `,
       }}
     >
+      <ReconnectGameModal />
       <ScrollToMyChallenges />
       <div className="mx-auto max-w-6xl">
+        {/* Email verification banner */}
+        {!user.emailVerified && (
+          <a
+            href="/verify-email"
+            className="mb-6 flex items-center gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-5 py-4 transition hover:bg-amber-500/20 sm:mb-8"
+          >
+            <span className="text-2xl">✉️</span>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-amber-300">Verify your email to start playing</p>
+              <p className="mt-0.5 text-sm text-stone-400">
+                You need to verify your email before you can play or deposit. Tap here to verify.
+              </p>
+            </div>
+          </a>
+        )}
+
         {/* Title row: Play a game | Username (ELO) — stack on mobile */}
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
           <h1 className="text-xl font-bold text-white sm:text-2xl md:text-3xl">Play a game</h1>
@@ -121,7 +139,7 @@ export default async function Home() {
 
         {/* 2 columns: 1v1, Challenge — single column on mobile with clear separator */}
         <div className="mt-10 grid grid-cols-1 gap-0 sm:mt-12 lg:grid-cols-2 lg:gap-10">
-          <Home1v1Card userId={user.id} />
+          <Home1v1Card userId={user.id} balanceCents={user.balance} />
           <div className="flex flex-col items-center gap-4 px-4 py-6 sm:py-8 lg:hidden" aria-hidden>
             <span className="h-px w-20 shrink-0 bg-gradient-to-r from-transparent via-stone-500 to-transparent" />
             <span className="text-xs font-medium uppercase tracking-wider text-stone-500">or</span>

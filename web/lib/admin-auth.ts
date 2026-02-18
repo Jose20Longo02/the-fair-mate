@@ -1,13 +1,21 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
+import { SESSION_SECRET, ADMIN_SECRET } from "./env";
 
 const ADMIN_COOKIE_NAME = "stakes_chess_admin";
-const SECRET = new TextEncoder().encode(
-  process.env.SESSION_SECRET ?? "dev-secret-cambiar-en-produccion"
-);
+const SECRET = new TextEncoder().encode(SESSION_SECRET);
+
+/** Cookie options for admin session: HttpOnly, Secure in prod, SameSite=Lax. */
+export const ADMIN_COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax" as const,
+  path: "/",
+  maxAge: 24 * 60 * 60, // 24 hours
+};
 
 export function getAdminSecret(): string {
-  return process.env.ADMIN_SECRET ?? "dev-admin-secret";
+  return ADMIN_SECRET;
 }
 
 export async function createAdminSession(): Promise<string> {

@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { settleGame, getUserBalance } from "@/lib/ledger";
 import { getEloChanges } from "@/lib/elo";
+import { executeOnChainSettlementAndUpdateGame } from "@/lib/settle-on-chain";
 import { checkRateLimit, getClientKey } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
 import { broadcastGameUpdate } from "@/lib/ws-notify";
@@ -20,7 +21,7 @@ export async function POST(
   const { id } = await params;
   const clientKey = getClientKey(request);
   const rateKey = `move:${session.userId}:${id}`;
-  const rate = checkRateLimit(rateKey, RATE_MOVES_PER_MIN, RATE_WINDOW_MS);
+  const rate = await checkRateLimit(rateKey, RATE_MOVES_PER_MIN, RATE_WINDOW_MS);
   if (!rate.ok) {
     return NextResponse.json(
       { error: `Too many moves. Wait ${rate.retryAfter}s.` },
@@ -55,7 +56,7 @@ export async function POST(
     const elapsed = now - turnStartedMs;
     const moverTimeRemaining = isWhiteTurn ? game.whiteTimeRemaining : game.blackTimeRemaining;
     if (elapsed >= moverTimeRemaining) {
-      // Timeout: moving player loses
+      // Timeout: moving player loses. Orden: terminar partida + ledger primero, broadcast, luego on-chain (evita partida atascada si falla on-chain).
       const loserId = session.userId;
       const winnerId = loserId === game.whiteId ? game.blackId : game.whiteId;
       const [whiteBalanceNow, blackBalanceNow] = await Promise.all([
@@ -65,6 +66,7 @@ export async function POST(
       const stake = game.stake;
       const whiteBalanceBefore = whiteBalanceNow + stake;
       const blackBalanceBefore = blackBalanceNow + stake;
+
       const updatedGame = await prisma.game.update({
         where: { id },
         data: { status: "timeout", winner: winnerId },
@@ -76,18 +78,26 @@ export async function POST(
       await settleGame(id, winnerId, loserId, game.stake);
       const whiteElo = updatedGame.white.elo;
       const blackElo = updatedGame.black.elo;
-      const winnerIsWhite = winnerId === game.whiteId;
-      const { winnerNew, loserNew } = getEloChanges(
-        winnerIsWhite ? whiteElo : blackElo,
-        winnerIsWhite ? blackElo : whiteElo,
-        false
-      );
-      await Promise.all([
-        prisma.user.update({ where: { id: winnerId }, data: { elo: winnerNew } }),
-        prisma.user.update({ where: { id: loserId }, data: { elo: loserNew } }),
-      ]);
-      const whiteEloAfter = winnerIsWhite ? winnerNew : loserNew;
-      const blackEloAfter = winnerIsWhite ? loserNew : winnerNew;
+      let whiteEloAfter = whiteElo;
+      let blackEloAfter = blackElo;
+      let eloWhiteDelta = 0;
+      let eloBlackDelta = 0;
+      if (!(game as { createdViaChallenge?: boolean }).createdViaChallenge) {
+        const winnerIsWhite = winnerId === game.whiteId;
+        const { winnerNew, loserNew } = getEloChanges(
+          winnerIsWhite ? whiteElo : blackElo,
+          winnerIsWhite ? blackElo : whiteElo,
+          false
+        );
+        await Promise.all([
+          prisma.user.update({ where: { id: winnerId }, data: { elo: winnerNew } }),
+          prisma.user.update({ where: { id: loserId }, data: { elo: loserNew } }),
+        ]);
+        whiteEloAfter = winnerIsWhite ? winnerNew : loserNew;
+        blackEloAfter = winnerIsWhite ? loserNew : winnerNew;
+        eloWhiteDelta = winnerIsWhite ? winnerNew - whiteElo : loserNew - whiteElo;
+        eloBlackDelta = winnerIsWhite ? loserNew - blackElo : winnerNew - blackElo;
+      }
       await prisma.game.update({
         where: { id },
         data: {
@@ -102,8 +112,8 @@ export async function POST(
       const gameOver = {
         winnerId,
         stake: game.stake,
-        eloWhiteDelta: winnerIsWhite ? winnerNew - whiteElo : loserNew - whiteElo,
-        eloBlackDelta: winnerIsWhite ? loserNew - blackElo : winnerNew - blackElo,
+        eloWhiteDelta,
+        eloBlackDelta,
         isDraw: false,
       };
       const finalGame = await prisma.game.findUnique({
@@ -114,6 +124,7 @@ export async function POST(
         },
       });
       broadcastGameUpdate({ gameId: id, game: finalGame ?? updatedGame, gameOver });
+      await executeOnChainSettlementAndUpdateGame(id, winnerId, loserId, stake);
       logger.info("game_ended", { gameId: id, status: "timeout", winnerId, stake: game.stake });
       return NextResponse.json({ game: finalGame ?? updatedGame, gameOver });
     }
@@ -212,45 +223,47 @@ export async function POST(
       let whiteEloAfter = whiteElo;
       let blackEloAfter = blackElo;
 
-      if (isDraw) {
-        const higherElo = Math.max(whiteElo, blackElo);
-        const lowerElo = Math.min(whiteElo, blackElo);
-        const { winnerNew, loserNew } = getEloChanges(higherElo, lowerElo, true);
-        if (whiteElo >= blackElo) {
-          eloWhiteDelta = winnerNew - whiteElo;
-          eloBlackDelta = loserNew - blackElo;
-          whiteEloAfter = winnerNew;
-          blackEloAfter = loserNew;
-        } else {
-          eloWhiteDelta = loserNew - whiteElo;
-          eloBlackDelta = winnerNew - blackElo;
-          whiteEloAfter = loserNew;
-          blackEloAfter = winnerNew;
+      if (!(game as { createdViaChallenge?: boolean }).createdViaChallenge) {
+        if (isDraw) {
+          const higherElo = Math.max(whiteElo, blackElo);
+          const lowerElo = Math.min(whiteElo, blackElo);
+          const { winnerNew, loserNew } = getEloChanges(higherElo, lowerElo, true);
+          if (whiteElo >= blackElo) {
+            eloWhiteDelta = winnerNew - whiteElo;
+            eloBlackDelta = loserNew - blackElo;
+            whiteEloAfter = winnerNew;
+            blackEloAfter = loserNew;
+          } else {
+            eloWhiteDelta = loserNew - whiteElo;
+            eloBlackDelta = winnerNew - blackElo;
+            whiteEloAfter = loserNew;
+            blackEloAfter = winnerNew;
+          }
+          await Promise.all([
+            prisma.user.update({ where: { id: game.whiteId }, data: { elo: whiteEloAfter } }),
+            prisma.user.update({ where: { id: game.blackId }, data: { elo: blackEloAfter } }),
+          ]);
+        } else if (winnerId) {
+          const winnerIsWhite = winnerId === game.whiteId;
+          const winnerElo = winnerIsWhite ? whiteElo : blackElo;
+          const loserElo = winnerIsWhite ? blackElo : whiteElo;
+          const { winnerNew, loserNew } = getEloChanges(winnerElo, loserElo, false);
+          if (winnerIsWhite) {
+            eloWhiteDelta = winnerNew - whiteElo;
+            eloBlackDelta = loserNew - blackElo;
+            whiteEloAfter = winnerNew;
+            blackEloAfter = loserNew;
+          } else {
+            eloWhiteDelta = loserNew - whiteElo;
+            eloBlackDelta = winnerNew - blackElo;
+            whiteEloAfter = loserNew;
+            blackEloAfter = winnerNew;
+          }
+          await Promise.all([
+            prisma.user.update({ where: { id: winnerId }, data: { elo: winnerNew } }),
+            prisma.user.update({ where: { id: loserId }, data: { elo: loserNew } }),
+          ]);
         }
-        await Promise.all([
-          prisma.user.update({ where: { id: game.whiteId }, data: { elo: whiteEloAfter } }),
-          prisma.user.update({ where: { id: game.blackId }, data: { elo: blackEloAfter } }),
-        ]);
-      } else if (winnerId) {
-        const winnerIsWhite = winnerId === game.whiteId;
-        const winnerElo = winnerIsWhite ? whiteElo : blackElo;
-        const loserElo = winnerIsWhite ? blackElo : whiteElo;
-        const { winnerNew, loserNew } = getEloChanges(winnerElo, loserElo, false);
-        if (winnerIsWhite) {
-          eloWhiteDelta = winnerNew - whiteElo;
-          eloBlackDelta = loserNew - blackElo;
-          whiteEloAfter = winnerNew;
-          blackEloAfter = loserNew;
-        } else {
-          eloWhiteDelta = loserNew - whiteElo;
-          eloBlackDelta = winnerNew - blackElo;
-          whiteEloAfter = loserNew;
-          blackEloAfter = winnerNew;
-        }
-        await Promise.all([
-          prisma.user.update({ where: { id: winnerId }, data: { elo: winnerNew } }),
-          prisma.user.update({ where: { id: loserId }, data: { elo: loserNew } }),
-        ]);
       }
 
       await prisma.game.update({
@@ -275,6 +288,7 @@ export async function POST(
       });
     }
 
+    // Notificar a ambos jugadores (incl. perdedor) antes del settlement on-chain para que la UI no se congele
     const gameToReturn =
       finalStatus !== "active"
         ? await prisma.game.findUnique({
@@ -287,6 +301,15 @@ export async function POST(
         : updatedGame;
 
     broadcastGameUpdate({ gameId: id, game: gameToReturn ?? updatedGame, gameOver });
+    // Settlement on-chain después del broadcast para que el perdedor reciba el game over al instante
+    if (gameOver && !gameOver.isDraw && gameOver.winnerId) {
+      await executeOnChainSettlementAndUpdateGame(
+        id,
+        gameOver.winnerId,
+        gameOver.winnerId === game.whiteId ? game.blackId : game.whiteId,
+        game.stake
+      );
+    }
     return NextResponse.json({ game: gameToReturn ?? updatedGame, move, gameOver });
   } catch (e) {
     logger.error("move_error", { gameId: id, error: String(e) });

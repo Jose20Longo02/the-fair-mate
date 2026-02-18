@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import ChessBoard from "@/components/ChessBoard";
 
 const PAGE_BG = "#252525";
@@ -11,6 +12,9 @@ export default async function PartidaPage({
 }) {
   const session = await getSession();
   if (!session) redirect("/login?from=/partida");
+
+  const user = await prisma.user.findUnique({ where: { id: session.userId }, select: { emailVerified: true } });
+  if (user && !user.emailVerified) redirect("/verify-email");
 
   const { id } = await params;
 

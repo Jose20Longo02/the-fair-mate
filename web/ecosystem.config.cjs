@@ -11,7 +11,7 @@ module.exports = {
     },
     {
       name: "ws-server",
-      script: "ws-server/server.js",
+      script: "ws-server/server.cjs",
       cwd: __dirname,
       watch: false,
     },

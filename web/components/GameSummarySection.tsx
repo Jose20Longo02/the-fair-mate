@@ -1,10 +1,11 @@
 "use client";
 
-/** Pot = 2 × stake. Platform takes 5%, winner gets 95%. Profit = winnerGets - stake. */
+import { PLATFORM_FEE_PERCENT } from "@/lib/commission";
+
+/** Pot = 2 × stake. Winner gets (1 - fee)% of pot. Profit = winnerGets - stake. */
 function winnerProfitCents(stakeCents: number): number {
   const potCents = stakeCents * 2;
-  const platformFeePercent = 0.05;
-  return Math.floor(potCents * (1 - platformFeePercent)) - stakeCents;
+  return Math.floor(potCents * (1 - PLATFORM_FEE_PERCENT)) - stakeCents;
 }
 
 function formatCents(cents: number) {

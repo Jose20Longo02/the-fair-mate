@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 const BUTTON_BLUE = "#1e40af";
@@ -8,32 +7,12 @@ const BUTTON_BLUE = "#1e40af";
 export default function DepositButton({
   variant,
   className,
-  onClick: onClose,
 }: {
   variant?: "default" | "header";
   className?: string;
   onClick?: () => void;
 }) {
-  const [loading, setLoading] = useState(false);
   const router = useRouter();
-
-  const handleDeposit = async () => {
-    setLoading(true);
-    onClose?.();
-    try {
-      const res = await fetch("/api/account/deposit", { method: "POST" });
-      if (res.ok) {
-        router.refresh();
-      } else {
-        alert("Deposit failed");
-      }
-    } catch {
-      alert("Connection error");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const isHeader = variant === "header";
 
   const baseClass = isHeader
@@ -46,12 +25,12 @@ export default function DepositButton({
 
   return (
     <button
-      onClick={handleDeposit}
-      disabled={loading}
+      type="button"
+      onClick={() => router.push("/cuenta/depositar")}
       className={fullClass}
       style={isHeader ? { backgroundColor: BUTTON_BLUE } : undefined}
     >
-      {loading ? "Depositing…" : isHeader ? "Deposit" : "Deposit $10 (simulated)"}
+      Deposit
     </button>
   );
 }

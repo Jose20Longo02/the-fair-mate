@@ -95,19 +95,19 @@ export default function AdminReportsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">Reportes</h1>
+      <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">Reports</h1>
       <p className="mt-2 text-stone-400">
-        Reclamaciones y solicitudes de revisión. Actualiza estado y notas (visibles para el usuario en &quot;Mis reportes&quot;).
+        Claims and review requests. Update status and notes (visible to the user in My reports).
       </p>
 
       <div className="mt-6 flex flex-wrap items-center gap-3">
-        <label className="text-sm font-medium text-stone-400">Estado:</label>
+        <label className="text-sm font-medium text-stone-400">Status:</label>
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
           className="rounded-lg border border-stone-600 bg-stone-800 px-3 py-2 text-sm text-white focus:border-stone-500 focus:outline-none focus:ring-1 focus:ring-stone-500"
         >
-          <option value="">Todos</option>
+          <option value="">All</option>
           {STATUS_OPTIONS.map((s) => (
             <option key={s} value={s}>{s}</option>
           ))}
@@ -116,20 +116,20 @@ export default function AdminReportsPage() {
 
       <div className="mt-6 overflow-x-auto rounded-xl border border-stone-600/80 bg-stone-800/80">
         {loading ? (
-          <p className="p-8 text-center text-stone-400">Cargando…</p>
+          <p className="p-8 text-center text-stone-400">Loading…</p>
         ) : reports.length === 0 ? (
-          <p className="p-8 text-center text-stone-400">No hay reportes con este filtro.</p>
+          <p className="p-8 text-center text-stone-400">No reports with this filter.</p>
         ) : (
           <table className="min-w-full divide-y divide-stone-600/80 text-left text-sm">
             <thead className="bg-stone-700/50">
               <tr>
-                <th className="px-3 py-3 font-medium text-stone-300 sm:px-4">Fecha</th>
-                <th className="px-3 py-3 font-medium text-stone-300 sm:px-4">Partida</th>
-                <th className="px-3 py-3 font-medium text-stone-300 sm:px-4">Reportador</th>
-                <th className="px-3 py-3 font-medium text-stone-300 sm:px-4 hidden lg:table-cell">Mensaje</th>
-                <th className="px-3 py-3 font-medium text-stone-300 sm:px-4">Estado</th>
-                <th className="px-3 py-3 font-medium text-stone-300 sm:px-4 hidden xl:table-cell">Notas admin</th>
-                <th className="px-3 py-3 font-medium text-stone-300 sm:px-4">Acción</th>
+                <th className="px-3 py-3 font-medium text-stone-300 sm:px-4">Date</th>
+                <th className="px-3 py-3 font-medium text-stone-300 sm:px-4">Game</th>
+                <th className="px-3 py-3 font-medium text-stone-300 sm:px-4">Reporter</th>
+                <th className="px-3 py-3 font-medium text-stone-300 sm:px-4 hidden lg:table-cell">Message</th>
+                <th className="px-3 py-3 font-medium text-stone-300 sm:px-4">Status</th>
+                <th className="px-3 py-3 font-medium text-stone-300 sm:px-4 hidden xl:table-cell">Admin notes</th>
+                <th className="px-3 py-3 font-medium text-stone-300 sm:px-4">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-600/60">
@@ -141,7 +141,7 @@ export default function AdminReportsPage() {
                       href={`/admin/games/${r.game.id}`}
                       className="font-medium text-white underline decoration-stone-500 underline-offset-2 hover:decoration-white"
                     >
-                      Revisar partida
+                      Review game
                     </Link>
                     <span className="block font-mono text-xs text-stone-500">{r.game.id.slice(0, 8)}…</span>
                     <span className="block text-xs text-stone-500">
@@ -177,7 +177,7 @@ export default function AdminReportsPage() {
                     <textarea
                       rows={2}
                       className={textareaClass}
-                      placeholder="Notas (visibles para el usuario)"
+                      placeholder="Notes (visible to user)"
                       value={reportEdits[r.id]?.adminNotes ?? r.adminNotes ?? ""}
                       onChange={(e) =>
                         setReportEdits((prev) => ({
@@ -195,7 +195,7 @@ export default function AdminReportsPage() {
                       className="rounded-lg px-3 py-1.5 text-xs font-medium text-white transition hover:opacity-90 disabled:opacity-60"
                       style={{ backgroundColor: BUTTON_BLUE }}
                     >
-                      {updatingReportId === r.id ? "…" : "Actualizar"}
+                      {updatingReportId === r.id ? "…" : "Update"}
                     </button>
                   </td>
                 </tr>

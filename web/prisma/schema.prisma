@@ -6,20 +6,25 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String   @map("password_hash")
-  name         String?
-  avatar       String?  // filename in /avatars/ e.g. "King.png"
-  elo          Int      @default(1200)
-  balance      Int      @default(1000) // centavos de USDC (1000 = $10 inicial)
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id                String   @id @default(cuid())
+  email             String   @unique
+  passwordHash      String   @map("password_hash")
+  name              String?
+  avatar            String?  // filename in /avatars/ e.g. "King.png"
+  elo               Int      @default(1200)
+  balance           Int      @default(0) // cents; only credited via real deposits (on-chain)
+  emailVerified     Boolean  @default(false) @map("email_verified")
+  verificationCode  String?  @map("verification_code") // 6-digit code
+  verificationCodeExpiresAt DateTime? @map("verification_code_expires_at")
+  resetToken        String?  @map("reset_token")
+  resetTokenExpiresAt DateTime? @map("reset_token_expires_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
 
   gamesAsWhite   Game[]         @relation("WhitePlayer")
   gamesAsBlack   Game[]         @relation("BlackPlayer")
@@ -56,6 +61,10 @@ model Game {
   blackEloAfter     Int?     @map("black_elo_after")
   whiteBalanceBeforeCents Int? @map("white_balance_before_cents")
   blackBalanceBeforeCents Int? @map("black_balance_before_cents")
+  disconnectedUserId      String?   @map("disconnected_user_id")
+  disconnectedAt         DateTime? @map("disconnected_at")
+  createdViaChallenge    Boolean   @default(false) @map("created_via_challenge")
+  settlementStatus       String?   @map("settlement_status") // "pending" | "completed" | "failed" (on-chain); null = draw or not applicable
 
   white   User         @relation("WhitePlayer", fields: [whiteId], references: [id])
   black   User         @relation("BlackPlayer", fields: [blackId], references: [id])
@@ -84,7 +93,7 @@ model LedgerEntry {
   id          String   @id @default(cuid())
   userId      String   @map("user_id")
   amount      Int      // positivo = ingreso, negativo = gasto
-  type        String   // "deposit", "stake", "win", "refund"
+  type        String   // "deposit", "stake", "win", "refund", "withdrawal"
   gameId      String?  @map("game_id")
   description String?
   createdAt   DateTime @default(now()) @map("created_at")
@@ -92,6 +101,28 @@ model LedgerEntry {
   user User @relation(fields: [userId], references: [id])
 
   @@map("ledger_entries")
+}
+
+// Idempotency for on-chain deposit indexing: one row per (chainId, txHash, logIndex)
+model ProcessedDepositEvent {
+  id         String   @id @default(cuid())
+  chainId    Int      @map("chain_id")
+  txHash     String   @map("tx_hash")
+  logIndex   Int      @map("log_index")
+  blockNumber Int     @map("block_number")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@unique([chainId, txHash, logIndex])
+  @@map("processed_deposit_events")
+}
+
+// Cursor for transfer indexer: last block scanned per chain so we never re-scan and never double-credit
+model IndexedTransferCursor {
+  chainId         Int   @id @map("chain_id")
+  lastBlockNumber Int   @map("last_block_number")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("indexed_transfer_cursors")
 }
 
 model GameChallenge {
@@ -110,6 +141,19 @@ model GameChallenge {
   challenged User @relation("Challenged", fields: [challengedId], references: [id])
 
   @@map("game_challenges")
+}
+
+model SupportTicket {
+  id         String   @id @default(cuid())
+  name       String
+  email      String
+  message    String
+  status     String   @default("open") // "open", "in_progress", "resolved", "closed"
+  adminNotes String?  @map("admin_notes")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@map("support_tickets")
 }
 
 model Notification {

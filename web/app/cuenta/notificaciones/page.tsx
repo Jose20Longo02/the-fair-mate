@@ -1,9 +1,15 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import type { Metadata } from "next";
 import { getSession } from "@/lib/auth";
 import NotificationsList from "./NotificationsList";
 
 const PAGE_BG = "#252525";
+
+export const metadata: Metadata = {
+  title: "Notifications — FairMate",
+  description: "Challenges, stake proposals and game status.",
+};
 
 export default async function NotificacionesPage() {
   const session = await getSession();

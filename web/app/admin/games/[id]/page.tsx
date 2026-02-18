@@ -91,7 +91,7 @@ export default async function AdminReviewGamePage({
           href="/admin/reports"
           className="text-sm font-medium text-stone-400 transition hover:text-white"
         >
-          Reportes
+          Reports
         </Link>
       </div>
 

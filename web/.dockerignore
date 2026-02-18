@@ -1,0 +1,43 @@
+# Dependencies and build
+node_modules
+.next
+npm-debug.log*
+.pnpm-debug.log*
+.yarn*
+
+# Env (pass at runtime via compose)
+.env
+.env.*
+!.env.example
+
+# Git and IDE
+.git
+.gitignore
+.cursor
+*.md
+!README.md
+
+# Tests and dev
+__tests__
+e2e
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+vitest.config.ts
+playwright.config.ts
+coverage
+
+# DB and misc
+*.db
+*.db-journal
+dev.db
+prisma/dev.db
+
+# Hardhat / contracts build (optional; include if deploy from container)
+cache
+artifacts
+
+# OS
+.DS_Store
+Thumbs.db

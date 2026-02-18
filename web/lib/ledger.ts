@@ -1,6 +1,7 @@
 import { prisma } from "./prisma";
+import { PLATFORM_FEE_PERCENT } from "./commission";
 
-export type LedgerType = "deposit" | "stake" | "win" | "refund";
+export type LedgerType = "deposit" | "stake" | "win" | "refund" | "withdrawal" | "adjustment";
 
 export async function addLedgerEntry(
   userId: string,
@@ -30,8 +31,9 @@ export async function updateUserBalance(userId: string, delta: number) {
 }
 
 /**
- * Descuenta stake a ambos jugadores al empezar la partida.
- * Retorna true si ambos tienen saldo suficiente; false si no.
+ * Deducts stake from both players at game start.
+ * Uses SELECT ... FOR UPDATE to lock rows and prevent race conditions.
+ * Returns true if both have sufficient balance; false otherwise.
  */
 export async function deductStakesForGame(
   player1Id: string,
@@ -39,32 +41,41 @@ export async function deductStakesForGame(
   stake: number,
   gameId: string
 ): Promise<boolean> {
-  const [p1, p2] = await Promise.all([
-    prisma.user.findUnique({ where: { id: player1Id }, select: { balance: true } }),
-    prisma.user.findUnique({ where: { id: player2Id }, select: { balance: true } }),
-  ]);
-  if (!p1 || !p2 || p1.balance < stake || p2.balance < stake) {
+  try {
+    await prisma.$transaction(async (tx) => {
+      // Lock both user rows — prevents concurrent balance modifications
+      const [p1] = await tx.$queryRawUnsafe<{ balance: number }[]>(
+        `SELECT balance FROM users WHERE id = $1 FOR UPDATE`,
+        player1Id
+      );
+      const [p2] = await tx.$queryRawUnsafe<{ balance: number }[]>(
+        `SELECT balance FROM users WHERE id = $1 FOR UPDATE`,
+        player2Id
+      );
+
+      if (!p1 || !p2 || p1.balance < stake || p2.balance < stake) {
+        throw new Error("Insufficient balance");
+      }
+
+      await tx.user.update({ where: { id: player1Id }, data: { balance: { decrement: stake } } });
+      await tx.user.update({ where: { id: player2Id }, data: { balance: { decrement: stake } } });
+      await tx.ledgerEntry.create({
+        data: { userId: player1Id, amount: -stake, type: "stake", gameId, description: "Stake" },
+      });
+      await tx.ledgerEntry.create({
+        data: { userId: player2Id, amount: -stake, type: "stake", gameId, description: "Stake" },
+      });
+    });
+    return true;
+  } catch {
     return false;
   }
-
-  await prisma.$transaction([
-    prisma.user.update({ where: { id: player1Id }, data: { balance: { decrement: stake } } }),
-    prisma.user.update({ where: { id: player2Id }, data: { balance: { decrement: stake } } }),
-    prisma.ledgerEntry.create({
-      data: { userId: player1Id, amount: -stake, type: "stake", gameId, description: "Stake" },
-    }),
-    prisma.ledgerEntry.create({
-      data: { userId: player2Id, amount: -stake, type: "stake", gameId, description: "Stake" },
-    }),
-  ]);
-  return true;
 }
 
-/** Comisión de la plataforma: 5%. El ganador recibe 95% del bote. */
-const PLATFORM_FEE_PERCENT = 0.05;
-
 /**
- * Acredita al ganador el bote menos 5% de comisión, o devuelve las apuestas en empate.
+ * Credits the winner: total pot (2× stake) minus platform commission (see config). Loser loses their stake; winner gets their stake back + opponent's stake minus 5% of total.
+ * Refunds both players on a draw.
+ * Uses SELECT ... FOR UPDATE to prevent race conditions on balance updates.
  */
 export async function settleGame(
   gameId: string,
@@ -72,33 +83,36 @@ export async function settleGame(
   loserId: string | null,
   stake: number
 ) {
-  const pot = stake * 2;
-
   if (winnerId) {
-    const winnerReceives = Math.floor(pot * (1 - PLATFORM_FEE_PERCENT));
-    await prisma.$transaction([
-      prisma.user.update({ where: { id: winnerId }, data: { balance: { increment: winnerReceives } } }),
-      prisma.ledgerEntry.create({
-        data: { userId: winnerId, amount: winnerReceives, type: "win", gameId, description: "Pot won (95%)" },
-      }),
-    ]);
+    const totalPot = 2 * stake;
+    const feeCents = Math.floor(totalPot * PLATFORM_FEE_PERCENT);
+    const winnerReceives = totalPot - feeCents; // e.g. stake=500 → 1000 - 50 = 950
+    await prisma.$transaction(async (tx) => {
+      await tx.$queryRawUnsafe(`SELECT id FROM users WHERE id = $1 FOR UPDATE`, winnerId);
+      await tx.user.update({ where: { id: winnerId }, data: { balance: { increment: winnerReceives } } });
+      await tx.ledgerEntry.create({
+        data: { userId: winnerId, amount: winnerReceives, type: "win", gameId, description: `Total pot minus ${PLATFORM_FEE_PERCENT * 100}% commission` },
+      });
+    });
   } else if (loserId === null) {
-    // Empate: devolver stake a ambos jugadores de la partida
+    // Draw: refund stake to both players
     const game = await prisma.game.findUnique({
       where: { id: gameId },
       select: { whiteId: true, blackId: true },
     });
     if (game) {
-      await prisma.$transaction([
-        prisma.user.update({ where: { id: game.whiteId }, data: { balance: { increment: stake } } }),
-        prisma.user.update({ where: { id: game.blackId }, data: { balance: { increment: stake } } }),
-        prisma.ledgerEntry.create({
+      await prisma.$transaction(async (tx) => {
+        await tx.$queryRawUnsafe(`SELECT id FROM users WHERE id = $1 FOR UPDATE`, game.whiteId);
+        await tx.$queryRawUnsafe(`SELECT id FROM users WHERE id = $1 FOR UPDATE`, game.blackId);
+        await tx.user.update({ where: { id: game.whiteId }, data: { balance: { increment: stake } } });
+        await tx.user.update({ where: { id: game.blackId }, data: { balance: { increment: stake } } });
+        await tx.ledgerEntry.create({
           data: { userId: game.whiteId, amount: stake, type: "refund", gameId, description: "Draw" },
-        }),
-        prisma.ledgerEntry.create({
+        });
+        await tx.ledgerEntry.create({
           data: { userId: game.blackId, amount: stake, type: "refund", gameId, description: "Draw" },
-        }),
-      ]);
+        });
+      });
     }
   }
 }

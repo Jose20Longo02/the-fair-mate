@@ -1,12 +1,19 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import type { Metadata } from "next";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import DepositButton from "@/components/DepositButton";
+import { getWithdrawNetworks } from "@/lib/networks";
+import AccountBalanceSection from "@/components/AccountBalanceSection";
 import AccountAvatarSection from "./AccountAvatarSection";
+import AccountDataPrivacySection from "./AccountDataPrivacySection";
 
 const PAGE_BG = "#252525";
-const BUTTON_BLUE = "#1e40af";
+
+export const metadata: Metadata = {
+  title: "My account — FairMate",
+  description: "Your profile, balance and history.",
+};
 
 export default async function Cuenta() {
   const session = await getSession();
@@ -14,7 +21,7 @@ export default async function Cuenta() {
 
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
-    select: { id: true, email: true, name: true, elo: true, balance: true, createdAt: true, avatar: true },
+    select: { id: true, email: true, name: true, elo: true, balance: true, createdAt: true, avatar: true, emailVerified: true },
   });
   if (!user) redirect("/login?from=/cuenta");
 
@@ -23,6 +30,8 @@ export default async function Cuenta() {
     orderBy: { createdAt: "desc" },
     take: 10,
   });
+
+  const withdrawNetworks = getWithdrawNetworks();
 
   const formatBalance = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
@@ -44,20 +53,27 @@ export default async function Cuenta() {
           </Link>
         </div>
 
-        {/* Balance */}
-        <div
-          className="mt-6 rounded-xl border border-stone-600/80 px-5 py-5 text-center sm:mt-8 sm:py-6"
-          style={{
-            background: `linear-gradient(180deg, ${BUTTON_BLUE} 0%, #1e3a8a 100%)`,
-            boxShadow: "0 4px 20px rgba(0,0,0,0.2)",
-          }}
-        >
-          <p className="text-xs font-medium uppercase tracking-[0.2em] text-white/70">Available balance (simulated USDC)</p>
-          <p className="mt-2 text-3xl font-bold tabular-nums text-white sm:text-4xl">{formatBalance(user.balance)}</p>
-          <div className="mt-4">
-            <DepositButton className="min-h-[44px] rounded-xl bg-white px-5 py-2.5 font-semibold text-[#1e40af] hover:bg-white/95 touch-manipulation" />
-          </div>
-        </div>
+        {/* Email verification banner */}
+        {!user.emailVerified && (
+          <Link
+            href="/verify-email"
+            className="mt-6 flex items-center gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-5 py-4 transition hover:bg-amber-500/20 sm:mt-8"
+          >
+            <span className="text-2xl">✉️</span>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-amber-300">Verify your email</p>
+              <p className="mt-0.5 text-sm text-stone-400">
+                You need to verify your email before you can play or deposit. Tap here to verify.
+              </p>
+            </div>
+          </Link>
+        )}
+
+        {/* Balance + Withdraw (poll balance every 15s so it updates after cron indexes deposits) */}
+        <AccountBalanceSection
+          initialBalanceCents={user.balance}
+          withdrawNetworks={withdrawNetworks}
+        />
 
         {/* Profile */}
         <div className="mt-6 rounded-xl border border-stone-600/80 bg-stone-800/90 p-5 text-white shadow-xl sm:mt-8 sm:p-6">
@@ -70,7 +86,23 @@ export default async function Cuenta() {
             </div>
             <div>
               <dt className="text-sm font-medium text-stone-500">Email</dt>
-              <dd className="mt-0.5 text-base text-stone-200">{user.email}</dd>
+              <dd className="mt-0.5 flex items-center gap-2 text-base text-stone-200">
+                {user.email}
+                {user.emailVerified ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs font-semibold text-emerald-400 ring-1 ring-inset ring-emerald-500/30">
+                    <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none"><path d="M10 3L4.5 8.5 2 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    Verified
+                  </span>
+                ) : (
+                  <Link
+                    href="/verify-email"
+                    className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-0.5 text-xs font-semibold text-amber-400 ring-1 ring-inset ring-amber-500/30 transition hover:bg-amber-500/25"
+                  >
+                    <svg className="h-3 w-3" viewBox="0 0 12 12" fill="none"><path d="M6 3v3.5M6 8.5h.005" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                    Not verified
+                  </Link>
+                )}
+              </dd>
             </div>
             {user.name && (
               <div>
@@ -118,6 +150,9 @@ export default async function Cuenta() {
             </div>
           )}
         </div>
+
+        {/* Data and privacy (GDPR: export, delete account) */}
+        <AccountDataPrivacySection />
       </div>
     </main>
   );

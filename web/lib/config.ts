@@ -8,8 +8,10 @@ export const WS_SERVER_URL =
   process.env.WS_SERVER_URL ?? "http://localhost:3002";
 
 /** Secret for server-to-server calls (matchmaking, cron, disconnect-forfeit). */
-export const MATCHMAKING_SECRET =
-  process.env.MATCHMAKING_SECRET ?? "dev-matchmaking-secret";
+export { MATCHMAKING_SECRET } from "./env";
+
+/** Optional: for Vercel Cron, same value sent as Bearer token. Set CRON_SECRET = MATCHMAKING_SECRET in Vercel. */
+export const CRON_SECRET = process.env.CRON_SECRET ?? "";
 
 // --- Stakes (cents) ---
 /** Minimum stake per game/challenge: $1. */

@@ -1,7 +1,13 @@
 import Link from "next/link";
 import Image from "next/image";
+import type { Metadata } from "next";
 
 const PAGE_BG = "#252525";
+
+export const metadata: Metadata = {
+  title: "How it works — FairMate",
+  description: "Choose a stake, get matched, play the game, winner takes the pot.",
+};
 const BUTTON_BLUE = "#1e40af";
 
 const STEPS = [
@@ -22,7 +28,7 @@ const STEPS = [
   },
   {
     title: "Winner takes the pot",
-    description: "The winner receives the combined stake minus a flat fee (5%).",
+    description: "The winner receives the combined stake minus a flat fee (2%).",
     image: "/images/Winner%20takes%20the%20pot.png",
   },
 ] as const;

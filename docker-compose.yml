@@ -1,0 +1,68 @@
+# App (Next.js + WS server from same image), PostgreSQL, Redis.
+# Uso: desde la raíz del repo:
+#   docker compose up -d
+#   docker compose run --rm app npx prisma db push   # primera vez: crear tablas
+# Variables: crear .env en web/ o definir aquí (ej. DATABASE_URL, SESSION_SECRET, etc.).
+
+services:
+  app:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://chess:chess_secret@postgres:5432/chess
+      SESSION_SECRET: ${SESSION_SECRET:-change-me-in-production}
+      ADMIN_SECRET: ${ADMIN_SECRET:-admin-secret}
+      MATCHMAKING_SECRET: ${MATCHMAKING_SECRET:-matchmaking-secret}
+      NEXT_PUBLIC_WS_URL: ws://localhost:3002
+      NEXT_API_URL: http://app:3001
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["npm", "start"]
+
+  ws:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    ports:
+      - "3002:3002"
+    environment:
+      NODE_ENV: production
+      WS_PORT: "3002"
+      NEXT_API_URL: http://app:3001
+      MATCHMAKING_SECRET: ${MATCHMAKING_SECRET:-matchmaking-secret}
+    depends_on:
+      - app
+    command: ["node", "ws-server/server.cjs"]
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: chess
+      POSTGRES_PASSWORD: chess_secret
+      POSTGRES_DB: chess
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chess -d chess"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    # Opcional: el rate limit de la app usa Upstash (REST). Este Redis sirve para cache/session si lo añades después.
+
+volumes:
+  postgres_data:
+  redis_data:

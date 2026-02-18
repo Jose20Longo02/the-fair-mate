@@ -1,12 +1,22 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import type { Metadata } from "next";
 import { getSession } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import MatchmakingPanel from "@/components/MatchmakingPanel";
 import ChallengePanel from "@/components/ChallengePanel";
+
+export const metadata: Metadata = {
+  title: "Play a game — FairMate",
+  description: "Random matchmaking or challenge someone by email or nickname.",
+};
 
 export default async function Jugar() {
   const session = await getSession();
   if (!session) redirect("/login?from=/jugar");
+
+  const user = await prisma.user.findUnique({ where: { id: session.userId }, select: { emailVerified: true } });
+  if (user && !user.emailVerified) redirect("/verify-email");
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-16 sm:px-6 sm:py-24">

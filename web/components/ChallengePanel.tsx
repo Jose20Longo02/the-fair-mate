@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 
 type Challenge = {
@@ -35,28 +35,41 @@ export default function ChallengePanel({ userId }: { userId: string }) {
   const [proposeStake, setProposeStake] = useState<Record<string, string>>({});
   const [respondingId, setRespondingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    const onChallengeUpdated = () => loadChallenges();
-    window.addEventListener("challenge-updated", onChallengeUpdated);
-    return () => window.removeEventListener("challenge-updated", onChallengeUpdated);
-  }, []);
-
-  const loadChallenges = () => {
+  const loadChallenges = useCallback(() => {
     setLoadingChallenges(true);
-    fetch("/api/challenges")
+    fetch("/api/challenges", { cache: "no-store" })
       .then((r) => r.json())
       .then((data) => {
         if (data.error) return;
         setChallenges(data.challenges ?? []);
       })
       .finally(() => setLoadingChallenges(false));
-  };
+  }, []);
+
+  useEffect(() => {
+    const onChallengeUpdated = () => loadChallenges();
+    window.addEventListener("challenge-updated", onChallengeUpdated);
+    return () => window.removeEventListener("challenge-updated", onChallengeUpdated);
+  }, [loadChallenges]);
 
   useEffect(() => {
     loadChallenges();
-    const t = setInterval(loadChallenges, 15000);
+    const t = setInterval(loadChallenges, 5000);
     return () => clearInterval(t);
-  }, []);
+  }, [loadChallenges]);
+
+  useEffect(() => {
+    const onFocus = () => loadChallenges();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") loadChallenges();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [loadChallenges]);
 
   function handleCreate(e: React.FormEvent) {
     e.preventDefault();

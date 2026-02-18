@@ -23,7 +23,7 @@ export async function POST(request: Request) {
 
     const previousGame = await prisma.game.findUnique({
       where: { id: previousGameId },
-      select: { whiteId: true, blackId: true, stake: true, status: true },
+      select: { whiteId: true, blackId: true, stake: true, status: true, createdViaChallenge: true },
     });
 
     if (!previousGame) {
@@ -49,7 +49,7 @@ export async function POST(request: Request) {
     const blackId = whiteId === w ? b : w;
 
     const game = await prisma.game.create({
-      data: { whiteId, blackId, stake },
+      data: { whiteId, blackId, stake, createdViaChallenge: previousGame.createdViaChallenge ?? false },
       include: {
         white: { select: { id: true, email: true, name: true, elo: true } },
         black: { select: { id: true, email: true, name: true, elo: true } },

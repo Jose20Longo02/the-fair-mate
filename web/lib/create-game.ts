@@ -22,7 +22,7 @@ export async function createGameBetweenPlayers(
   const blackId = whiteId === player1Id ? player2Id : player1Id;
 
   const game = await prisma.game.create({
-    data: { whiteId, blackId, stake },
+    data: { whiteId, blackId, stake, createdViaChallenge: true },
     include: {
       white: { select: { id: true, email: true, name: true, elo: true } },
       black: { select: { id: true, email: true, name: true, elo: true } },

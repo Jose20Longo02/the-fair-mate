@@ -1,6 +1,12 @@
+import type { Metadata } from "next";
 import SupportForm from "./SupportForm";
 
 const PAGE_BG = "#252525";
+
+export const metadata: Metadata = {
+  title: "Support — FairMate",
+  description: "Get help with FairMate. Fill out the form and we'll get back to you.",
+};
 
 export default function SupportPage() {
   return (

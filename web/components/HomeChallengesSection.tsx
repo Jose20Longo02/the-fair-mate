@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { PLATFORM_FEE_PERCENT } from "@/lib/commission";
 
 type Challenge = {
   id: string;
@@ -24,28 +25,41 @@ export default function HomeChallengesSection({ userId }: { userId: string }) {
   const [proposeStake, setProposeStake] = useState<Record<string, string>>({});
   const [respondingId, setRespondingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    const onChallengeUpdated = () => loadChallenges();
-    window.addEventListener("challenge-updated", onChallengeUpdated);
-    return () => window.removeEventListener("challenge-updated", onChallengeUpdated);
-  }, []);
-
-  const loadChallenges = () => {
+  const loadChallenges = useCallback(() => {
     setLoading(true);
-    fetch("/api/challenges")
+    fetch("/api/challenges", { cache: "no-store" })
       .then((r) => r.json())
       .then((data) => {
         if (data.error) return;
         setChallenges(data.challenges ?? []);
       })
       .finally(() => setLoading(false));
-  };
+  }, []);
+
+  useEffect(() => {
+    const onChallengeUpdated = () => loadChallenges();
+    window.addEventListener("challenge-updated", onChallengeUpdated);
+    return () => window.removeEventListener("challenge-updated", onChallengeUpdated);
+  }, [loadChallenges]);
 
   useEffect(() => {
     loadChallenges();
-    const t = setInterval(loadChallenges, 15000);
+    const t = setInterval(loadChallenges, 5000);
     return () => clearInterval(t);
-  }, []);
+  }, [loadChallenges]);
+
+  useEffect(() => {
+    const onFocus = () => loadChallenges();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") loadChallenges();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [loadChallenges]);
 
   function handleRespond(challengeId: string, action: "accept" | "propose", stakeCentsArg?: number) {
     setRespondingId(challengeId);
@@ -86,12 +100,8 @@ export default function HomeChallengesSection({ userId }: { userId: string }) {
 
   const formatCents = (c: number) => `$${(c / 100).toFixed(2)}`;
   const formatDate = (s: string) => new Date(s).toLocaleString();
-  /** Pot = 2 × stake. Platform takes 5%, winner gets 95%. */
-  const winnerGetsCents = (stakeCents: number) => {
-    const potCents = stakeCents * 2;
-    const platformFeePercent = 0.05;
-    return Math.floor(potCents * (1 - platformFeePercent));
-  };
+  const winnerGetsCents = (stakeCents: number) =>
+    Math.floor(stakeCents * 2 * (1 - PLATFORM_FEE_PERCENT));
 
   if (loading) {
     return (
@@ -144,7 +154,7 @@ export default function HomeChallengesSection({ userId }: { userId: string }) {
                 <div className="sm:text-center">
                   <p className="text-base font-medium text-stone-300 sm:text-base">Stake: {formatCents(c.currentStakeCents)}</p>
                   <p className="mt-0.5 text-sm text-stone-400 sm:text-sm">
-                    Winner gets {formatCents(winnerGetsCents(c.currentStakeCents))} (5% fee)
+                    Winner gets {formatCents(winnerGetsCents(c.currentStakeCents))} ({PLATFORM_FEE_PERCENT * 100}% fee)
                   </p>
                 </div>
                 <div className="flex flex-col gap-2 sm:items-end">

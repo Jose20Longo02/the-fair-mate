@@ -97,7 +97,7 @@ export default function HomeChallengeCard({ userId }: { userId: string }) {
                   min="1"
                   max="50"
                   step="1"
-                  placeholder="Custom stake (max $50)"
+                  placeholder="Custom stake"
                   value={customStakeInput}
                   onChange={(e) => {
                     const v = e.target.value;

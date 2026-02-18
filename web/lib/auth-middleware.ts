@@ -7,12 +7,7 @@ const SECRET = new TextEncoder().encode(
 
 export async function hasValidSession(cookieHeader: string | null): Promise<boolean> {
   if (!cookieHeader) return false;
-  const cookies = Object.fromEntries(
-    cookieHeader.split(";").map((c) => {
-      const [key, ...v] = c.trim().split("=");
-      return [key, v.join("=").trim()];
-    })
-  );
+  const cookies = parseCookies(cookieHeader);
   const token = cookies[COOKIE_NAME];
   if (!token) return false;
   try {
@@ -21,4 +16,26 @@ export async function hasValidSession(cookieHeader: string | null): Promise<bool
   } catch {
     return false;
   }
+}
+
+export async function getSessionUserId(cookieHeader: string | null): Promise<string | null> {
+  if (!cookieHeader) return null;
+  const cookies = parseCookies(cookieHeader);
+  const token = cookies[COOKIE_NAME];
+  if (!token) return null;
+  try {
+    const { payload } = await jwtVerify(token, SECRET);
+    return (payload.userId as string) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function parseCookies(cookieHeader: string): Record<string, string> {
+  return Object.fromEntries(
+    cookieHeader.split(";").map((c) => {
+      const [key, ...v] = c.trim().split("=");
+      return [key, v.join("=").trim()];
+    })
+  );
 }
