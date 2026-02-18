@@ -25,7 +25,7 @@ export default function TestGame() {
         setError(data.error ?? "Error creating game");
         return;
       }
-      router.push(`/partida/${data.game.id}`);
+      router.push(`/game/${data.game.id}`);
     } catch {
       setError("Connection error");
     } finally {
@@ -56,7 +56,7 @@ export default function TestGame() {
             placeholder="Paste another user's ID"
           />
           <p className="mt-1 text-xs text-stone-500">
-            You can see your ID on /cuenta. Create two accounts and use the other one&apos;s ID.
+            You can see your ID on /account. Create two accounts and use the other one&apos;s ID.
           </p>
         </div>
         <div>
@@ -86,7 +86,7 @@ export default function TestGame() {
       </div>
 
       <p className="mt-6 text-center">
-        <Link href="/cuenta" className="text-stone-500 hover:underline">
+        <Link href="/account" className="text-stone-500 hover:underline">
           ← Back to My account
         </Link>
       </p>

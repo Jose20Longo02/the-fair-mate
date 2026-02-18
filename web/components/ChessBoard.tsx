@@ -344,7 +344,7 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
           setRematchError(null);
         }
         if (msg.type === "rematchMatched" && msg.gameId) {
-          router.push(`/partida/${msg.gameId}`);
+          router.push(`/game/${msg.gameId}`);
         }
         if (msg.type === "rematchDeclined" && msg.declinedBy !== userId) {
           setRematchRequestedByMe(false);

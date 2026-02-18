@@ -13,17 +13,21 @@ const PAGE_BG = "#252525";
 export const metadata: Metadata = {
   title: "My account — FairMate",
   description: "Your profile, balance and history.",
+  robots: {
+    index: false,
+    follow: false,
+  },
 };
 
-export default async function Cuenta() {
+export default async function AccountPage() {
   const session = await getSession();
-  if (!session) redirect("/login?from=/cuenta");
+  if (!session) redirect("/login?from=/account");
 
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
     select: { id: true, email: true, name: true, elo: true, balance: true, createdAt: true, avatar: true, emailVerified: true },
   });
-  if (!user) redirect("/login?from=/cuenta");
+  if (!user) redirect("/login?from=/account");
 
   const ledger = await prisma.ledgerEntry.findMany({
     where: { userId: user.id },
@@ -32,7 +36,6 @@ export default async function Cuenta() {
   });
 
   const withdrawNetworks = getWithdrawNetworks();
-
   const formatBalance = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
   return (
@@ -53,7 +56,6 @@ export default async function Cuenta() {
           </Link>
         </div>
 
-        {/* Email verification banner */}
         {!user.emailVerified && (
           <Link
             href="/verify-email"
@@ -69,13 +71,11 @@ export default async function Cuenta() {
           </Link>
         )}
 
-        {/* Balance + Withdraw (poll balance every 15s so it updates after cron indexes deposits) */}
         <AccountBalanceSection
           initialBalanceCents={user.balance}
           withdrawNetworks={withdrawNetworks}
         />
 
-        {/* Profile */}
         <div className="mt-6 rounded-xl border border-stone-600/80 bg-stone-800/90 p-5 text-white shadow-xl sm:mt-8 sm:p-6">
           <h2 className="text-xs font-medium uppercase tracking-widest text-stone-500">Profile</h2>
           <AccountAvatarSection currentAvatar={user.avatar} />
@@ -127,7 +127,6 @@ export default async function Cuenta() {
           </dl>
         </div>
 
-        {/* Recent transactions */}
         <div className="mt-6 rounded-xl border border-stone-600/80 bg-stone-800/90 p-5 text-white shadow-xl sm:mt-8 sm:p-6">
           <h2 className="text-xs font-medium uppercase tracking-widest text-stone-500">Recent transactions</h2>
           {ledger.length === 0 ? (
@@ -151,7 +150,6 @@ export default async function Cuenta() {
           )}
         </div>
 
-        {/* Data and privacy (GDPR: export, delete account) */}
         <AccountDataPrivacySection />
       </div>
     </main>

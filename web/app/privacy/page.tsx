@@ -5,7 +5,23 @@ const PAGE_BG = "#252525";
 
 export const metadata: Metadata = {
   title: "Privacy Policy — FairMate",
-  description: "Privacy Policy for FairMate.",
+  description: "Read FairMate's Privacy Policy, including what data is collected and how it is used.",
+  keywords: ["FairMate privacy", "USDC chess privacy", "FairMate data policy"],
+  alternates: {
+    canonical: "/privacy",
+  },
+  openGraph: {
+    title: "Privacy Policy — FairMate",
+    description: "Privacy policy for FairMate users.",
+    url: "/privacy",
+    images: [{ url: "/images/FairMate%20Logo.jpg?v=3", alt: "FairMate logo" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Privacy Policy — FairMate",
+    description: "Privacy policy for FairMate users.",
+    images: ["/images/FairMate%20Logo.jpg?v=3"],
+  },
 };
 
 export default function PrivacyPage() {

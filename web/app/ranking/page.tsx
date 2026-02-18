@@ -6,7 +6,27 @@ const PAGE_BG = "#252525";
 
 export const metadata: Metadata = {
   title: "Ranking — FairMate",
-  description: "Leaderboard by ELO and earnings.",
+  description: "Explore the FairMate leaderboard by ELO and net game earnings in competitive USDC chess.",
+  keywords: [
+    "chess leaderboard with cash stakes",
+    "rated chess for USDC",
+    "FairMate ranking",
+  ],
+  alternates: {
+    canonical: "/ranking",
+  },
+  openGraph: {
+    title: "Ranking — FairMate",
+    description: "Track top players by ELO and earnings in skill-based USDC chess matches.",
+    url: "/ranking",
+    images: [{ url: "/images/FairMate%20Logo.jpg?v=3", alt: "FairMate logo" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Ranking — FairMate",
+    description: "Track top players by ELO and earnings in skill-based USDC chess matches.",
+    images: ["/images/FairMate%20Logo.jpg?v=3"],
+  },
 };
 const ACCENT_BLUE = "#1e40af";
 
@@ -64,8 +84,8 @@ export default async function RankingPage({
             </h1>
             <p className="mt-3 max-w-md text-sm leading-relaxed text-stone-400 sm:mt-5 sm:text-base">
               {sort === "elo"
-                ? "Top 50 players by ELO rating."
-                : "Top 50 players by net earnings from games."}
+                ? "Top 50 players by ELO rating in competitive 1v1 USDC chess."
+                : "Top 50 players by net earnings from USDC stake games."}
             </p>
           </div>
           <Link
@@ -106,6 +126,22 @@ export default async function RankingPage({
             </Link>
           </div>
         </div>
+
+        <section className="mt-5 rounded-xl border border-stone-600/80 bg-stone-800/70 p-4 sm:mt-8 sm:p-5">
+          <h2 className="text-base font-semibold text-white">How ranking works</h2>
+          <p className="mt-2 text-sm leading-relaxed text-stone-400">
+            ELO reflects your competitive performance in skill-based matches. Earnings show your net
+            game outcome from stake matches. Learn match flow on{" "}
+            <Link href="/how-it-works" className="text-white underline underline-offset-2 hover:no-underline">
+              How it works
+            </Link>{" "}
+            and review our{" "}
+            <Link href="/fair-play" className="text-white underline underline-offset-2 hover:no-underline">
+              Fair Play
+            </Link>{" "}
+            policy.
+          </p>
+        </section>
 
         {players.length === 0 ? (
           <div className="mt-5 rounded-2xl border border-stone-600/80 bg-stone-800/90 p-6 text-center shadow-xl sm:mt-8 sm:p-10">

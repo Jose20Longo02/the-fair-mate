@@ -5,8 +5,28 @@ import type { Metadata } from "next";
 const PAGE_BG = "#252525";
 
 export const metadata: Metadata = {
-  title: "How it works — FairMate",
-  description: "Choose a stake, get matched, play the game, winner takes the pot.",
+  title: "How It Works — FairMate",
+  description: "Learn how FairMate USDC chess matches work: choose a stake, get matched, play, and settle transparently.",
+  keywords: [
+    "how chess stake payouts work",
+    "USDC chess platform",
+    "FairMate how it works",
+  ],
+  alternates: {
+    canonical: "/how-it-works",
+  },
+  openGraph: {
+    title: "How It Works — FairMate",
+    description: "Choose a stake, get matched, play a skill-based chess game, and settle transparently.",
+    url: "/how-it-works",
+    images: [{ url: "/images/FairMate%20Logo.jpg?v=3", alt: "FairMate logo" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "How It Works — FairMate",
+    description: "Choose a stake, get matched, play a skill-based chess game, and settle transparently.",
+    images: ["/images/FairMate%20Logo.jpg?v=3"],
+  },
 };
 const BUTTON_BLUE = "#1e40af";
 
@@ -33,14 +53,13 @@ const STEPS = [
   },
 ] as const;
 
-export default function ComoFunciona() {
+export default function HowItWorksPage() {
   return (
     <main
       className="min-h-[calc(100vh-4rem)] w-full flex-1 overflow-x-hidden px-8 py-8 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-16 sm:min-h-[calc(100vh-5rem)] sm:px-8 sm:pt-10 sm:pb-[max(2rem,env(safe-area-inset-bottom))] md:min-h-[calc(100vh-6rem)] md:px-10 md:py-12 md:pt-12 md:pb-[max(2rem,env(safe-area-inset-bottom))] lg:py-16 lg:pt-16"
       style={{ backgroundColor: PAGE_BG }}
     >
       <div className="mx-auto max-w-6xl min-w-0">
-        {/* Title + description */}
         <header className="text-center">
           <h1 className="text-3xl font-bold leading-tight tracking-tight text-white sm:text-3xl md:text-4xl lg:text-5xl">
             How it works:
@@ -50,7 +69,6 @@ export default function ComoFunciona() {
           </p>
         </header>
 
-        {/* Separator + 4 steps — on mobile: card per step, small image */}
         <section
           aria-label="Steps"
           className="mt-14 border-t border-stone-600/70 pt-14 sm:mt-12 sm:border-0 sm:pt-12 lg:mt-16 lg:pt-16"
@@ -92,7 +110,6 @@ export default function ComoFunciona() {
           </div>
         </section>
 
-        {/* Separator + Fair play | Challenge friends */}
         <section
           id="fair-play"
           className="mt-16 grid grid-cols-1 gap-10 border-t border-stone-600/70 pt-14 sm:mt-12 sm:grid-cols-2 sm:items-center sm:gap-16 sm:border-0 sm:pt-12 md:mt-16 md:gap-24 md:pt-16 lg:gap-32 lg:pt-16 xl:gap-48"
@@ -119,7 +136,6 @@ export default function ComoFunciona() {
           </div>
         </section>
 
-        {/* CTA */}
         <section className="mx-auto mt-16 max-w-3xl rounded-2xl border border-stone-600/80 bg-stone-800/60 px-6 py-10 text-center sm:mt-16 sm:px-8 sm:py-12 md:mt-20 md:px-10 md:py-16 lg:mt-24">
           <h2 className="text-3xl font-bold text-white sm:text-2xl md:text-3xl lg:text-4xl">
             Skill over luck.

@@ -78,7 +78,7 @@ export default function HomeChallengesSection({ userId }: { userId: string }) {
           return;
         }
         if (data.game) {
-          router.push(`/partida/${data.game.id}`);
+          router.push(`/game/${data.game.id}`);
           return;
         }
         setProposeStake((prev) => ({ ...prev, [challengeId]: "" }));

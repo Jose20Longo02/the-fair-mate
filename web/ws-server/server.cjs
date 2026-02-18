@@ -25,7 +25,7 @@ const ELO_MARGIN = 200; // only match players within ± this ELO
 const rooms = new Map();
 // stake (cents) -> [{ userId, ws, elo }]
 const matchQueue = new Map();
-// userId -> ws (presencia en /jugar para retos; permite notificar "challengeAccepted")
+// userId -> ws (presence on /play for challenges; enables "challengeAccepted" notifications)
 const presence = new Map();
 
 // Rate limit: joinQueue by userId (5 per min)

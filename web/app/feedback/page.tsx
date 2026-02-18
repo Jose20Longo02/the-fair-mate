@@ -8,6 +8,10 @@ const PAGE_BG = "#252525";
 export const metadata: Metadata = {
   title: "Feedback — FairMate",
   description: "Share ideas to improve FairMate.",
+  robots: {
+    index: false,
+    follow: false,
+  },
 };
 
 export default async function FeedbackPage() {

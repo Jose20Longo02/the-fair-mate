@@ -33,6 +33,12 @@ npm run dev:pm2:restart  # Restart
 
 The app will be at http://localhost:3001
 
+## SEO Operations
+
+- SEO runbook: `docs/seo-operations.md`
+- Public sitemap: `/sitemap.xml`
+- Robots: `/robots.txt`
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

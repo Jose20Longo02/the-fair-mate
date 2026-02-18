@@ -92,7 +92,7 @@ export async function POST(
       type: "challenge_accepted",
       title: "Challenge accepted - Game started",
       message: "The challenge was accepted. Join the game!",
-      linkUrl: `/partida/${game.id}`,
+      linkUrl: `/game/${game.id}`,
       challengeId: id,
       gameId: game.id,
     });
@@ -145,7 +145,7 @@ export async function POST(
       type: "challenge_accepted",
       title: "Challenge accepted - Game started",
       message: "The challenge was accepted. Join the game!",
-      linkUrl: `/partida/${game.id}`,
+      linkUrl: `/game/${game.id}`,
       challengeId: id,
       gameId: game.id,
     });

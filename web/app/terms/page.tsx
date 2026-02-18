@@ -5,7 +5,23 @@ const PAGE_BG = "#252525";
 
 export const metadata: Metadata = {
   title: "Terms of Service — FairMate",
-  description: "Terms of Service for FairMate.",
+  description: "Read the Terms of Service for using FairMate and participating in USDC stake chess matches.",
+  keywords: ["FairMate terms", "USDC chess terms", "skill-based chess platform policy"],
+  alternates: {
+    canonical: "/terms",
+  },
+  openGraph: {
+    title: "Terms of Service — FairMate",
+    description: "Legal terms for using FairMate.",
+    url: "/terms",
+    images: [{ url: "/images/FairMate%20Logo.jpg?v=3", alt: "FairMate logo" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Terms of Service — FairMate",
+    description: "Legal terms for using FairMate.",
+    images: ["/images/FairMate%20Logo.jpg?v=3"],
+  },
 };
 
 export default function TermsPage() {

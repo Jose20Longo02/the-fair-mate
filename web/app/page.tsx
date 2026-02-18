@@ -1,5 +1,7 @@
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import type { Metadata } from "next";
+import Link from "next/link";
 import LoopingChessDemo from "@/components/LoopingChessDemo";
 import CtaButton from "@/components/CtaButton";
 import Home1v1Card from "@/components/Home1v1Card";
@@ -11,6 +13,36 @@ import ReconnectGameModal from "@/components/ReconnectGameModal";
 
 const PAGE_BG = "#252525";
 const BUTTON_BLUE = "#1e40af";
+
+export const metadata: Metadata = {
+  title: "Play Chess for USDC — FairMate",
+  description:
+    "FairMate is a skill-based USDC chess platform for competitive 1v1 matches, transparent stake payouts, and fair play.",
+  keywords: [
+    "play chess for USDC",
+    "USDC chess platform",
+    "1v1 chess with stakes",
+    "FairMate",
+  ],
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    title: "Play Chess for USDC — FairMate",
+    description:
+      "Skill-based 1v1 chess matches with USDC stakes, fair matchmaking, and transparent payouts.",
+    url: "/",
+    type: "website",
+    images: [{ url: "/images/FairMate%20Logo.jpg?v=3", alt: "FairMate logo" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Play Chess for USDC — FairMate",
+    description:
+      "Skill-based 1v1 chess matches with USDC stakes, fair matchmaking, and transparent payouts.",
+    images: ["/images/FairMate%20Logo.jpg?v=3"],
+  },
+};
 
 export default async function Home() {
   const session = await getSession();
@@ -28,10 +60,28 @@ export default async function Home() {
           <div className="flex shrink-0 flex-col items-center text-center">
             <div className="w-full min-w-0 max-w-lg px-1 sm:min-w-[18rem] sm:px-0">
               <h1 className="mx-auto max-w-[16ch] text-4xl font-black leading-tight text-white sm:text-5xl md:text-5xl lg:text-5xl">
-                Play where every game counts!
+                Play chess for USDC where every game counts.
               </h1>
               <p className="mx-auto mt-4 max-w-[18rem] text-[15px] font-normal leading-snug text-stone-400 sm:mt-5 sm:max-w-[20rem] sm:text-base md:mt-6 md:max-w-[22rem] md:text-lg">
-                Fair 1v1 matches against players your level. Fixed stakes. Transparent rules.
+                Skill-based 1v1 matches against players at your level. Fixed USDC stakes. Transparent payout rules.
+              </p>
+              <p className="mx-auto mt-4 max-w-[20rem] text-sm text-stone-400 sm:max-w-[24rem] sm:text-base">
+                Learn{" "}
+                <Link href="/how-it-works" className="text-white underline underline-offset-2 hover:no-underline">
+                  how it works
+                </Link>
+                , review{" "}
+                <Link href="/fair-play" className="text-white underline underline-offset-2 hover:no-underline">
+                  Fair Play
+                </Link>
+                , see the{" "}
+                <Link href="/ranking" className="text-white underline underline-offset-2 hover:no-underline">
+                  Ranking
+                </Link>
+                , or contact{" "}
+                <Link href="/support" className="text-white underline underline-offset-2 hover:no-underline">
+                  Support
+                </Link>.
               </p>
               <CtaButton
                 href="/register"

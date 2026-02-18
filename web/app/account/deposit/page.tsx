@@ -12,11 +12,15 @@ const PAGE_BG = "#252525";
 export const metadata: Metadata = {
   title: "Deposit — FairMate",
   description: "Send USDC to your unique deposit address.",
+  robots: {
+    index: false,
+    follow: false,
+  },
 };
 
-export default async function DepositarPage() {
+export default async function AccountDepositPage() {
   const session = await getSession();
-  if (!session) redirect("/login?from=/cuenta/depositar");
+  if (!session) redirect("/login?from=/account/deposit");
 
   const user = await prisma.user.findUnique({ where: { id: session.userId }, select: { emailVerified: true } });
   if (user && !user.emailVerified) redirect("/verify-email");
@@ -41,7 +45,7 @@ export default async function DepositarPage() {
       <div className="mx-auto max-w-xl min-w-0">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">Deposit</h1>
-          <Link href="/cuenta" className="shrink-0 text-sm font-medium text-stone-400 transition hover:text-white">
+          <Link href="/account" className="shrink-0 text-sm font-medium text-stone-400 transition hover:text-white">
             ← Back to account
           </Link>
         </div>

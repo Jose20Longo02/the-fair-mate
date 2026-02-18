@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import type { Metadata } from "next";
 import ScrollToTop from "./ScrollToTop";
 
@@ -7,6 +8,26 @@ const PAGE_BG = "#252525";
 export const metadata: Metadata = {
   title: "Fair Play — FairMate",
   description: "Skill-based matchmaking, fixed stakes, anti-abuse monitoring, consistent result handling.",
+  keywords: [
+    "fair play chess for money",
+    "anti-cheat chess platform",
+    "FairMate fair play",
+  ],
+  alternates: {
+    canonical: "/fair-play",
+  },
+  openGraph: {
+    title: "Fair Play — FairMate",
+    description: "See how FairMate protects skill-based competition and enforces fair play in USDC chess.",
+    url: "/fair-play",
+    images: [{ url: "/images/FairMate%20Logo.jpg?v=3", alt: "FairMate logo" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Fair Play — FairMate",
+    description: "See how FairMate protects skill-based competition and enforces fair play in USDC chess.",
+    images: ["/images/FairMate%20Logo.jpg?v=3"],
+  },
 };
 
 const FAIR_PLAY_ITEMS = [
@@ -96,6 +117,16 @@ export default function FairPlayPage() {
           </div>
           <p className="mt-14 px-2 text-center text-base leading-relaxed text-stone-400 sm:mt-20 sm:px-0 lg:mt-24 lg:text-lg">
             {FOOTER_TEXT}
+          </p>
+          <p className="mt-5 text-center text-sm text-stone-400">
+            Learn the full match flow on{" "}
+            <Link href="/how-it-works" className="text-white underline underline-offset-2 hover:no-underline">
+              How it works
+            </Link>{" "}
+            or contact{" "}
+            <Link href="/support" className="text-white underline underline-offset-2 hover:no-underline">
+              Support
+            </Link>.
           </p>
         </section>
       </div>

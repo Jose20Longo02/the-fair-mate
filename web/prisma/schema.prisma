@@ -164,7 +164,7 @@ model Notification {
   type      String   @map("type") // "challenge_received" | "challenge_rejected" | "challenge_counter_proposal" | "challenge_accepted"
   title     String
   message   String?
-  linkUrl   String?  @map("link_url")   // e.g. /jugar, /partida/xxx
+  linkUrl   String?  @map("link_url")   // e.g. /play, /game/xxx
   challengeId String? @map("challenge_id")
   gameId    String?  @map("game_id")
   read      Boolean  @default(false)

@@ -67,7 +67,7 @@ export default function Home1v1Card({ userId, balanceCents }: { userId: string; 
           setStatus("matched");
           ws.close();
           wsRef.current = null;
-          router.push(`/partida/${data.gameId}`);
+          router.push(`/game/${data.gameId}`);
         }
         if (data.type === "matchError") {
           searchingRef.current = false;

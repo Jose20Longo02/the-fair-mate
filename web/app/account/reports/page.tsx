@@ -9,6 +9,10 @@ const PAGE_BG = "#252525";
 export const metadata: Metadata = {
   title: "My reports — FairMate",
   description: "Track your result reports and our response.",
+  robots: {
+    index: false,
+    follow: false,
+  },
 };
 
 const BUTTON_BLUE = "#1e40af";
@@ -36,9 +40,9 @@ const STATUS_LABELS: Record<string, { label: string; description: string; classN
   },
 };
 
-export default async function MisReportesPage() {
+export default async function AccountReportsPage() {
   const session = await getSession();
-  if (!session) redirect("/login?from=/cuenta/reportes");
+  if (!session) redirect("/login?from=/account/reports");
 
   const reports = await prisma.gameReport.findMany({
     where: { userId: session.userId },
@@ -83,7 +87,7 @@ export default async function MisReportesPage() {
               Track your result reports and see our response. We take every report seriously to keep the platform fair.
             </p>
           </div>
-          <Link href="/cuenta" className="shrink-0 py-2 text-base font-medium text-stone-400 transition hover:text-white touch-manipulation">
+          <Link href="/account" className="shrink-0 py-2 text-base font-medium text-stone-400 transition hover:text-white touch-manipulation">
             ← Back to My account
           </Link>
         </div>
@@ -105,7 +109,7 @@ export default async function MisReportesPage() {
               You can request a review or report an issue at the end of any finished game, from the result screen.
             </p>
             <Link
-              href="/cuenta"
+              href="/account"
               className="mt-5 inline-flex min-h-[48px] items-center justify-center rounded-xl px-6 py-3 text-base font-semibold text-white transition hover:opacity-90 touch-manipulation"
               style={{ backgroundColor: BUTTON_BLUE }}
             >
@@ -133,7 +137,7 @@ export default async function MisReportesPage() {
                   <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-3">
                     <div className="min-w-0 flex-1">
                       <Link
-                        href={`/partida/${game.id}`}
+                        href={`/game/${game.id}`}
                         className="text-lg font-medium text-blue-300 hover:text-blue-200 sm:text-xl"
                       >
                         Game {game.id.slice(0, 8)}…

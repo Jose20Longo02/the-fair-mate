@@ -355,14 +355,14 @@ export default function GameOverModal({
               {reportSent ? (
                 <div className="text-center text-sm text-stone-400">
                   <p>Report sent.</p>
-                  <Link href="/cuenta/reportes" className="font-medium text-stone-300 underline hover:no-underline">
+                  <Link href="/account/reports" className="font-medium text-stone-300 underline hover:no-underline">
                     Track your reports
                   </Link>
                 </div>
               ) : alreadyReported ? (
                 <div className="text-center text-sm text-stone-500">
                   <p>You already reported this game.</p>
-                  <Link href="/cuenta/reportes" className="font-medium text-stone-400 underline hover:no-underline">
+                  <Link href="/account/reports" className="font-medium text-stone-400 underline hover:no-underline">
                     View your report
                   </Link>
                 </div>

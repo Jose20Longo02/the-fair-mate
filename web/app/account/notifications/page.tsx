@@ -9,11 +9,15 @@ const PAGE_BG = "#252525";
 export const metadata: Metadata = {
   title: "Notifications — FairMate",
   description: "Challenges, stake proposals and game status.",
+  robots: {
+    index: false,
+    follow: false,
+  },
 };
 
-export default async function NotificacionesPage() {
+export default async function AccountNotificationsPage() {
   const session = await getSession();
-  if (!session) redirect("/login?from=/cuenta/notificaciones");
+  if (!session) redirect("/login?from=/account/notifications");
 
   return (
     <main
@@ -30,7 +34,7 @@ export default async function NotificacionesPage() {
               Challenges, stake proposals and game status.
             </p>
           </div>
-          <Link href="/cuenta" className="shrink-0 py-2 text-sm font-medium text-stone-400 transition hover:text-white touch-manipulation">
+          <Link href="/account" className="shrink-0 py-2 text-sm font-medium text-stone-400 transition hover:text-white touch-manipulation">
             ← Back to My account
           </Link>
         </div>

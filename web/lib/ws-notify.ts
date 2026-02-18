@@ -58,7 +58,7 @@ export async function broadcastGameUpdate(
   }
 }
 
-/** Checks if a user is currently connected to the WS server (e.g. on /jugar). */
+/** Checks if a user is currently connected to the WS server (e.g. on /play). */
 export async function isUserOnline(userId: string): Promise<boolean> {
   try {
     const res = await fetch(`${WS_SERVER_URL}/online?userId=${encodeURIComponent(userId)}`);

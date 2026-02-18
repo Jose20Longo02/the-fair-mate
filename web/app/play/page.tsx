@@ -9,11 +9,15 @@ import ChallengePanel from "@/components/ChallengePanel";
 export const metadata: Metadata = {
   title: "Play a game — FairMate",
   description: "Random matchmaking or challenge someone by email or nickname.",
+  robots: {
+    index: false,
+    follow: false,
+  },
 };
 
-export default async function Jugar() {
+export default async function PlayPage() {
   const session = await getSession();
-  if (!session) redirect("/login?from=/jugar");
+  if (!session) redirect("/login?from=/play");
 
   const user = await prisma.user.findUnique({ where: { id: session.userId }, select: { emailVerified: true } });
   if (user && !user.emailVerified) redirect("/verify-email");
@@ -30,7 +34,7 @@ export default async function Jugar() {
       <section className="mt-8">
         <h2 className="text-lg font-semibold text-stone-900">Random matchmaking</h2>
         <p className="mt-1 text-sm text-stone-600">
-          Choose your stake and we'll match you with another player with the same stake.
+          Choose your stake and we&apos;ll match you with another player with the same stake.
         </p>
         <MatchmakingPanel userId={session.userId} />
       </section>
@@ -44,7 +48,7 @@ export default async function Jugar() {
       </section>
 
       <p className="mt-8 text-center">
-        <Link href="/cuenta" className="text-stone-500 hover:underline">
+        <Link href="/account" className="text-stone-500 hover:underline">
           ← Back to My account
         </Link>
       </p>

@@ -26,7 +26,7 @@ export default function DepositButton({
   return (
     <button
       type="button"
-      onClick={() => router.push("/cuenta/depositar")}
+      onClick={() => router.push("/account/deposit")}
       className={fullClass}
       style={isHeader ? { backgroundColor: BUTTON_BLUE } : undefined}
     >

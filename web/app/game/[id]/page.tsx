@@ -1,17 +1,27 @@
 import { redirect } from "next/navigation";
+import type { Metadata } from "next";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import ChessBoard from "@/components/ChessBoard";
 
 const PAGE_BG = "#252525";
 
-export default async function PartidaPage({
+export const metadata: Metadata = {
+  title: "Game — FairMate",
+  description: "Live chess game room.",
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
+
+export default async function GamePage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const session = await getSession();
-  if (!session) redirect("/login?from=/partida");
+  if (!session) redirect("/login?from=/game");
 
   const user = await prisma.user.findUnique({ where: { id: session.userId }, select: { emailVerified: true } });
   if (user && !user.emailVerified) redirect("/verify-email");

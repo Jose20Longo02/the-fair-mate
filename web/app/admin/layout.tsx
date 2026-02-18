@@ -1,6 +1,22 @@
 import AdminNav from "@/components/AdminNav";
+import type { Metadata } from "next";
 
 const PAGE_BG = "#252525";
+
+export const metadata: Metadata = {
+  robots: {
+    index: false,
+    follow: false,
+    googleBot: {
+      index: false,
+      follow: false,
+      noimageindex: true,
+      "max-image-preview": "none",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
+  },
+};
 
 export default function AdminLayout({
   children,

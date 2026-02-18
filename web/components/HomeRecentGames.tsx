@@ -73,7 +73,7 @@ export default function HomeRecentGames({ games }: { games: GameRow[] }) {
                 <span className="hidden text-base text-stone-300 md:inline md:whitespace-nowrap">{g.moveCount} moves</span>
                 {/* 5. Summary button */}
                 <Link
-                  href={`/partida/${g.id}`}
+                  href={`/game/${g.id}`}
                   className="min-h-[44px] flex shrink-0 items-center justify-center rounded-lg bg-stone-600 px-4 py-2.5 text-center text-sm font-medium text-stone-300 transition-colors hover:bg-stone-500 hover:text-white md:py-2"
                 >
                   Summary

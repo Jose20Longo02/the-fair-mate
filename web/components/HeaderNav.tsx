@@ -73,7 +73,7 @@ export default function HeaderNav({
   }, [hamburgerOpen]);
 
   // Keep header balance fresh without manual reload:
-  // - immediate refresh on route changes (e.g. entering /partida/*)
+  // - immediate refresh on route changes (e.g. entering /game/*)
   // - short polling while user is logged in
   useEffect(() => {
     if (!session) return;
@@ -91,7 +91,7 @@ export default function HeaderNav({
       {!session && (
         <>
           <Link
-            href="/como-funciona"
+            href="/how-it-works"
             className="block py-3 text-base font-medium text-white transition hover:opacity-90"
             onClick={closeHamburger}
           >
@@ -135,28 +135,28 @@ export default function HeaderNav({
   const accountLinks = session ? (
     <>
       <Link
-        href="/cuenta"
+        href="/account"
         className="block py-3 text-base font-medium text-white transition hover:opacity-90"
         onClick={closeHamburger}
       >
         My account
       </Link>
       <Link
-        href="/cuenta"
+        href="/account"
         className="block py-3 text-base font-medium text-white transition hover:opacity-90"
         onClick={closeHamburger}
       >
         Withdraw
       </Link>
       <Link
-        href="/cuenta/notificaciones"
+        href="/account/notifications"
         className="block py-3 text-base font-medium text-white transition hover:opacity-90"
         onClick={closeHamburger}
       >
         Notifications
       </Link>
       <Link
-        href="/cuenta/reportes"
+        href="/account/reports"
         className="block py-3 text-base font-medium text-white transition hover:opacity-90"
         onClick={closeHamburger}
       >
@@ -196,7 +196,7 @@ export default function HeaderNav({
           <div className="hidden md:flex md:items-center md:gap-14 md:gap-16 lg:gap-20">
             {!session && (
               <>
-                <Link href="/como-funciona" className="text-sm font-medium text-white transition hover:opacity-90">
+                <Link href="/how-it-works" className="text-sm font-medium text-white transition hover:opacity-90">
                   How it works
                 </Link>
                 <Link href="/fair-play" className="text-sm font-medium text-white transition hover:opacity-90">
@@ -303,7 +303,7 @@ export default function HeaderNav({
                     role="menu"
                   >
                     <Link
-                      href="/cuenta"
+                      href="/account"
                       className="block px-4 py-2.5 text-sm font-medium text-white transition hover:bg-stone-700"
                       role="menuitem"
                       onClick={() => setAvatarMenuOpen(false)}
@@ -311,7 +311,7 @@ export default function HeaderNav({
                       My account
                     </Link>
                     <Link
-                      href="/cuenta"
+                      href="/account"
                       className="block px-4 py-2.5 text-sm font-medium text-white transition hover:bg-stone-700"
                       role="menuitem"
                       onClick={() => setAvatarMenuOpen(false)}
@@ -319,7 +319,7 @@ export default function HeaderNav({
                       Withdraw
                     </Link>
                     <Link
-                      href="/cuenta/notificaciones"
+                      href="/account/notifications"
                       className="block px-4 py-2.5 text-sm font-medium text-white transition hover:bg-stone-700"
                       role="menuitem"
                       onClick={() => setAvatarMenuOpen(false)}
@@ -327,7 +327,7 @@ export default function HeaderNav({
                       Notifications
                     </Link>
                     <Link
-                      href="/cuenta/reportes"
+                      href="/account/reports"
                       className="block px-4 py-2.5 text-sm font-medium text-white transition hover:bg-stone-700"
                       role="menuitem"
                       onClick={() => setAvatarMenuOpen(false)}

@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import { hasValidSession } from "@/lib/auth-middleware";
 import { hasAdminSessionFromCookieHeader } from "@/lib/admin-auth";
 
-const PROTECTED_PATHS = ["/cuenta", "/partida", "/jugar"];
+const PROTECTED_PATHS = ["/account", "/game", "/play"];
 const ADMIN_PATH = "/admin";
 
 const MUTATING_METHODS = ["POST", "PUT", "PATCH", "DELETE"];

@@ -38,7 +38,7 @@ export default function ReconnectGameModal() {
   const handleReconnect = () => {
     if (!game) return;
     setDismissed(true);
-    router.push(`/partida/${game.id}`);
+    router.push(`/game/${game.id}`);
   };
 
   const handleForfeit = async () => {

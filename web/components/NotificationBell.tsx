@@ -92,7 +92,7 @@ export default function NotificationBell({ userId }: { userId: string }) {
             window.dispatchEvent(new CustomEvent("challenge-updated"));
           }
           if (data.type === "challengeAccepted" && data.gameId) {
-            router.push(`/partida/${data.gameId}`);
+            router.push(`/game/${data.gameId}`);
           }
         } catch (e) {
           console.error("[NotificationBell] Error processing WS message:", e);
@@ -217,7 +217,7 @@ export default function NotificationBell({ userId }: { userId: string }) {
           </div>
           <div className="border-t border-stone-600/80 px-2 py-2">
             <Link
-              href="/cuenta/notificaciones"
+              href="/account/notifications"
               onClick={() => setOpen(false)}
               className="block rounded-lg px-3 py-2.5 text-center text-sm font-medium text-white transition hover:bg-stone-700"
             >
