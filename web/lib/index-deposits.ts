@@ -18,6 +18,44 @@ const ERC20_TRANSFER_ABI = [
 /** USDC has 6 decimals; we store cents (2 decimals). So amountCents = amount / 1e4 */
 const USDC_TO_CENTS = 1e4;
 
+async function markPendingDepositCredited(
+  chainId: number,
+  txHash: string,
+  userId: string,
+  amountRaw?: string,
+  amountCents?: number
+): Promise<void> {
+  try {
+    await prisma.pendingDeposit.updateMany({
+      where: { chainId, txHash, userId, status: { in: ["pending", "failed", "expired"] } },
+      data: {
+        status: "credited",
+        creditedAt: new Date(),
+        error: null,
+        ...(amountRaw != null ? { amountRaw } : {}),
+        ...(amountCents != null ? { amountCents } : {}),
+      },
+    });
+  } catch {
+    // Older deployments might not have pending_deposits yet; do not block indexing.
+  }
+}
+
+async function markPendingDepositFailed(
+  chainId: number,
+  txHash: string,
+  error: string
+): Promise<void> {
+  try {
+    await prisma.pendingDeposit.updateMany({
+      where: { chainId, txHash, status: "pending" },
+      data: { status: "failed", error },
+    });
+  } catch {
+    // Ignore reconciliation failures to keep indexer resilient.
+  }
+}
+
 /** Reintenta la operación hasta 3 veces si falla por 503 / server error. */
 async function withRetry<T>(fn: () => Promise<T>, delayMs = 2000): Promise<T> {
   let lastErr: unknown;
@@ -202,24 +240,35 @@ export async function creditDepositByTxHash(
     if (log.address.toLowerCase() !== cfg.usdcAddress.toLowerCase() || log.topics[0] !== transferTopic) continue;
     const parsed = usdc.interface.parseLog({ topics: log.topics as string[], data: log.data });
     if (!parsed || parsed.name !== "Transfer") continue;
+    const txHashLow = receipt.hash.toLowerCase();
     const from = (parsed.args as { from?: string }).from?.toLowerCase();
     if (from && depositAddressesSet.has(from)) continue;
     const to = (parsed.args.to as string).toLowerCase();
     const value = parsed.args.value as bigint;
+    const amountCents = Math.floor(Number(value) / USDC_TO_CENTS);
+    if (amountCents <= 0) continue;
     const userId = userIdOverride
       ? (to === getDepositAddress(userIdOverride).toLowerCase() ? userIdOverride : null)
       : depositAddressToUser.get(to);
-    if (!userId) continue;
+    if (!userId) {
+      await markPendingDepositFailed(
+        chainId,
+        txHashLow,
+        userIdOverride
+          ? "Transfer destination does not match requested user deposit address"
+          : "Transfer destination is not a recognized deposit address"
+      );
+      continue;
+    }
 
-    const txHashLow = receipt.hash.toLowerCase();
     const logIndex = log.index;
     const existing = await prisma.processedDepositEvent.findUnique({
       where: { chainId_txHash_logIndex: { chainId, txHash: txHashLow, logIndex } },
     });
-    if (existing) continue;
-
-    const amountCents = Math.floor(Number(value) / USDC_TO_CENTS);
-    if (amountCents <= 0) continue;
+    if (existing) {
+      await markPendingDepositCredited(chainId, txHashLow, userId, value.toString(), amountCents);
+      continue;
+    }
 
     try {
       await prisma.$transaction(async (tx) => {
@@ -242,9 +291,11 @@ export async function creditDepositByTxHash(
         });
       });
       processed++;
+      await markPendingDepositCredited(chainId, txHashLow, userId, value.toString(), amountCents);
       logger.info("credit_deposit_by_tx_hash", { userId, amountCents, chainId, txHash: txHashLow });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
+      await markPendingDepositFailed(chainId, txHashLow, msg);
       return { ok: false, processed, error: msg };
     }
   }
@@ -302,17 +353,22 @@ async function indexTransfersToDepositAddresses(
     const amountRaw = args?.value;
     if (!to || amountRaw == null) continue;
     const userId = depositAddressToUser.get(to);
-    if (!userId) continue;
+    if (!userId) {
+      await markPendingDepositFailed(cfg.chainId, txHash, "Transfer destination is not a recognized deposit address");
+      continue;
+    }
 
     const existing = await prisma.processedDepositEvent.findUnique({
       where: {
         chainId_txHash_logIndex: { chainId: cfg.chainId, txHash, logIndex },
       },
     });
-    if (existing) continue;
-
     const amountCents = Math.floor(Number(amountRaw) / USDC_TO_CENTS);
     if (amountCents <= 0) continue;
+    if (existing) {
+      await markPendingDepositCredited(cfg.chainId, txHash, userId, amountRaw.toString(), amountCents);
+      continue;
+    }
 
     try {
       await prisma.$transaction(async (tx) => {
@@ -333,10 +389,12 @@ async function indexTransfersToDepositAddresses(
         });
       });
       processed++;
+      await markPendingDepositCredited(cfg.chainId, txHash, userId, amountRaw.toString(), amountCents);
       logger.info("index_transfer_credited", { userId, amountCents, chainId: cfg.chainId, txHash });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       errors.push(`Transfer credit failed ${txHash}:${logIndex}: ${msg}`);
+      await markPendingDepositFailed(cfg.chainId, txHash, msg);
     }
   }
   return { processed, errors };
@@ -385,23 +443,27 @@ async function indexDepositsForChain(cfg: ChainConfig): Promise<{ processed: num
     const { blockNumber, transactionHash, index: logIndex } = e;
     const txHash = transactionHash.toLowerCase();
 
-    const existing = await prisma.processedDepositEvent.findUnique({
-      where: {
-        chainId_txHash_logIndex: { chainId: cfg.chainId, txHash, logIndex },
-      },
-    });
-    if (existing) continue;
-
     const args = e.args as { userId?: string; amount?: bigint } | undefined;
     const userId = args?.userId;
     const amountRaw = args?.amount;
     if (userId == null || amountRaw == null) {
       errors.push(`Invalid event at ${txHash}:${logIndex}`);
+      await markPendingDepositFailed(cfg.chainId, txHash, "Invalid DepositFor event payload");
       continue;
     }
 
     const amountCents = Math.floor(Number(amountRaw) / USDC_TO_CENTS);
     if (amountCents <= 0) continue;
+
+    const existing = await prisma.processedDepositEvent.findUnique({
+      where: {
+        chainId_txHash_logIndex: { chainId: cfg.chainId, txHash, logIndex },
+      },
+    });
+    if (existing) {
+      await markPendingDepositCredited(cfg.chainId, txHash, userId, amountRaw.toString(), amountCents);
+      continue;
+    }
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -409,6 +471,7 @@ async function indexDepositsForChain(cfg: ChainConfig): Promise<{ processed: num
     });
     if (!user) {
       logger.warn("index_deposit_unknown_user", { userId, chainId: cfg.chainId, txHash });
+      await markPendingDepositFailed(cfg.chainId, txHash, "DepositFor references unknown user");
       continue;
     }
 
@@ -436,10 +499,12 @@ async function indexDepositsForChain(cfg: ChainConfig): Promise<{ processed: num
         });
       });
       processed++;
+      await markPendingDepositCredited(cfg.chainId, txHash, userId, amountRaw.toString(), amountCents);
       logger.info("index_deposit_credited", { userId, amountCents, chainId: cfg.chainId, txHash });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       errors.push(`Credit failed ${txHash}:${logIndex}: ${msg}`);
+      await markPendingDepositFailed(cfg.chainId, txHash, msg);
     }
   }
 

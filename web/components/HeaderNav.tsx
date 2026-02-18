@@ -28,6 +28,7 @@ export default function HeaderNav({
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   const [hamburgerOpen, setHamburgerOpen] = useState(false);
   const [liveBalanceCents, setLiveBalanceCents] = useState<number | null>(balanceCents);
+  const [hasPendingDeposit, setHasPendingDeposit] = useState(false);
   const avatarMenuRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
 
@@ -40,10 +41,11 @@ export default function HeaderNav({
     try {
       const res = await fetch("/api/account/balance", { cache: "no-store" });
       if (!res.ok) return;
-      const data = (await res.json()) as { balance?: number };
+      const data = (await res.json()) as { balance?: number; hasPendingDeposit?: boolean };
       if (typeof data.balance === "number") {
         setLiveBalanceCents(data.balance);
       }
+      setHasPendingDeposit(Boolean(data.hasPendingDeposit));
     } catch {
       // ignore transient UI refresh failures
     }
@@ -118,6 +120,15 @@ export default function HeaderNav({
       >
         Support
       </Link>
+      {session && (
+        <Link
+          href="/feedback"
+          className="inline-flex min-h-[40px] w-fit items-center justify-center rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-600"
+          onClick={closeHamburger}
+        >
+          Give us your feedback
+        </Link>
+      )}
     </>
   );
 
@@ -199,6 +210,14 @@ export default function HeaderNav({
             <Link href="/support" className="text-sm font-medium text-white transition hover:opacity-90">
               Support
             </Link>
+            {session && (
+              <Link
+                href="/feedback"
+                className="inline-flex min-h-[36px] items-center justify-center rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-600"
+              >
+                Give us your feedback
+              </Link>
+            )}
           </div>
         </div>
 
@@ -218,6 +237,11 @@ export default function HeaderNav({
                   <span className="text-sm font-semibold tabular-nums text-white sm:text-base">
                     {formatBalance(liveBalanceCents)}
                   </span>
+                  {hasPendingDeposit && (
+                    <span className="text-xs font-medium text-amber-300">
+                      Acreditando...
+                    </span>
+                  )}
                 </div>
               )}
               <DepositButton variant="header" />

@@ -139,7 +139,7 @@ export default function AdminDashboardPage() {
 
       <section className="mt-10">
         <h2 className="mb-4 text-lg font-semibold text-white">Quick access</h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <Link
             href="/admin/games"
             className="flex flex-col rounded-xl border border-stone-600/80 bg-stone-800/80 p-5 transition hover:border-stone-500 hover:bg-stone-800 sm:p-6"
@@ -163,6 +163,14 @@ export default function AdminDashboardPage() {
             <span className="text-3xl mb-2">📋</span>
             <span className="font-semibold text-white">Reports</span>
             <span className="mt-1 text-sm text-stone-400">Claims and result review</span>
+          </Link>
+          <Link
+            href="/admin/feedback"
+            className="flex flex-col rounded-xl border border-stone-600/80 bg-stone-800/80 p-5 transition hover:border-stone-500 hover:bg-stone-800 sm:p-6"
+          >
+            <span className="text-3xl mb-2">🟢</span>
+            <span className="font-semibold text-white">Feedback</span>
+            <span className="mt-1 text-sm text-stone-400">Ideas and product suggestions from users</span>
           </Link>
           <Link
             href="/admin/support"

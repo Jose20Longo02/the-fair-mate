@@ -16,5 +16,23 @@ export async function GET() {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  return NextResponse.json({ balance: user.balance });
+  const expiresBefore = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  await prisma.pendingDeposit.updateMany({
+    where: {
+      userId: session.userId,
+      status: "pending",
+      createdAt: { lt: expiresBefore },
+    },
+    data: { status: "expired", error: "Deposit was not credited within 24h" },
+  });
+
+  const pendingDepositsCount = await prisma.pendingDeposit.count({
+    where: { userId: session.userId, status: "pending" },
+  });
+
+  return NextResponse.json({
+    balance: user.balance,
+    hasPendingDeposit: pendingDepositsCount > 0,
+    pendingDepositsCount,
+  });
 }

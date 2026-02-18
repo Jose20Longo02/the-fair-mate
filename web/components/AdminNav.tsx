@@ -12,6 +12,8 @@ const links = [
   { href: "/admin/games", label: "Partidas" },
   { href: "/admin/users", label: "Usuarios" },
   { href: "/admin/reports", label: "Reportes" },
+  { href: "/admin/feedback", label: "Feedback" },
+  { href: "/admin/support", label: "Support" },
 ];
 
 export default function AdminNav() {

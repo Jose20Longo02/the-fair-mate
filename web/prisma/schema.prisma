@@ -33,6 +33,8 @@ model User {
   challengesSent     GameChallenge[] @relation("Challenger")
   challengesReceived GameChallenge[] @relation("Challenged")
   notifications      Notification[]
+  pendingDeposits    PendingDeposit[]
+  feedbackEntries    Feedback[]
 
   @@map("users")
 }
@@ -171,4 +173,40 @@ model Notification {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("notifications")
+}
+
+model PendingDeposit {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  chainId     Int      @map("chain_id")
+  txHash      String   @map("tx_hash")
+  amountRaw   String?  @map("amount_raw")
+  amountCents Int?     @map("amount_cents")
+  status      String   @default("pending") // "pending" | "credited" | "failed" | "expired"
+  creditedAt  DateTime? @map("credited_at")
+  error       String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([chainId, txHash])
+  @@index([userId, status])
+  @@map("pending_deposits")
+}
+
+model Feedback {
+  id            String   @id @default(cuid())
+  userId        String   @map("user_id")
+  emailSnapshot String   @map("email_snapshot")
+  message       String
+  status        String   @default("new") // "new" | "in_review" | "planned" | "closed"
+  adminNotes    String?  @map("admin_notes")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@map("feedback")
 }

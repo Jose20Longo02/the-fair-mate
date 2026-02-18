@@ -17,6 +17,10 @@ export default function TransferCryptoSection({
 }) {
   const [copied, setCopied] = useState(false);
   const [selected, setSelected] = useState<Network>(networks[0] ?? { id: "", name: "", chainId: 137, logoUrl: "" });
+  const [txHash, setTxHash] = useState("");
+  const [registeringPending, setRegisteringPending] = useState(false);
+  const [pendingError, setPendingError] = useState("");
+  const [pendingOk, setPendingOk] = useState("");
 
   const copyAddress = async () => {
     try {
@@ -38,6 +42,44 @@ export default function TransferCryptoSection({
   const current = selected.chainId ? selected : networks[0];
   const ethereumUri = current ? `ethereum:${depositAddress}@${current.chainId}` : depositAddress;
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(ethereumUri)}`;
+
+  const registerPendingDeposit = async () => {
+    const normalizedTxHash = txHash.trim().toLowerCase();
+    if (!/^0x[a-f0-9]{64}$/.test(normalizedTxHash)) {
+      setPendingError("Enter a valid transaction hash (0x...).");
+      setPendingOk("");
+      return;
+    }
+    if (!current?.chainId) {
+      setPendingError("Select a network first.");
+      setPendingOk("");
+      return;
+    }
+    setRegisteringPending(true);
+    setPendingError("");
+    setPendingOk("");
+    try {
+      const res = await fetch("/api/account/deposits/pending", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          txHash: normalizedTxHash,
+          chainId: current.chainId,
+        }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setPendingError(data.error || "Could not register pending deposit.");
+        return;
+      }
+      setPendingOk("Deposit registered. Balance will show Acreditando... until credited.");
+      setTxHash("");
+    } catch {
+      setPendingError("Network error while registering pending deposit.");
+    } finally {
+      setRegisteringPending(false);
+    }
+  };
 
   return (
     <div
@@ -116,6 +158,33 @@ export default function TransferCryptoSection({
         <p className="mt-3 text-xs leading-relaxed text-stone-500">
           Send USDC on {current?.name ?? "the selected network"} to this address. Your balance will update after confirmation.
         </p>
+        <div className="mt-4 rounded-xl border border-stone-600/60 bg-stone-800/70 p-3">
+          <p className="text-xs font-medium uppercase tracking-wider text-stone-400">
+            Track sent deposit
+          </p>
+          <p className="mt-1 text-xs text-stone-500">
+            After sending USDC, paste your tx hash to show pending status in the header.
+          </p>
+          <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+            <input
+              type="text"
+              value={txHash}
+              onChange={(e) => setTxHash(e.target.value)}
+              placeholder="0x..."
+              className="min-h-[40px] w-full rounded-lg border border-stone-600 bg-stone-900 px-3 py-2 text-xs text-white placeholder-stone-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+            <button
+              type="button"
+              onClick={() => void registerPendingDeposit()}
+              disabled={registeringPending}
+              className="rounded-lg bg-blue-700 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-600 disabled:opacity-60"
+            >
+              {registeringPending ? "Registering..." : "Register tx"}
+            </button>
+          </div>
+          {pendingError && <p className="mt-2 text-xs text-red-400">{pendingError}</p>}
+          {pendingOk && <p className="mt-2 text-xs text-emerald-400">{pendingOk}</p>}
+        </div>
         {selected.id === "polygon" && (
           <a
             href={`https://polygonscan.com/address/${depositAddress}#tokentxns`}
