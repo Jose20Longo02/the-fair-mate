@@ -20,10 +20,10 @@ export const metadata: Metadata = {
   description: "Competitive chess platform with USDC stakes. Play 1v1, win the pot.",
   icons: {
     icon: [
-      { url: "/images/FairMate Logo.jpg?v=2", type: "image/jpeg" },
+      { url: "/images/FairMate%20Logo.jpg?v=3", type: "image/jpeg" },
     ],
-    shortcut: [{ url: "/images/FairMate Logo.jpg?v=2", type: "image/jpeg" }],
-    apple: [{ url: "/images/FairMate Logo.jpg?v=2", type: "image/jpeg" }],
+    shortcut: [{ url: "/images/FairMate%20Logo.jpg?v=3", type: "image/jpeg" }],
+    apple: [{ url: "/images/FairMate%20Logo.jpg?v=3", type: "image/jpeg" }],
   },
 };
 
