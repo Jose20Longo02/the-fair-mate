@@ -66,7 +66,7 @@ export default function SharePreviewPage() {
             const div = el as HTMLElement;
             div.style.backgroundColor = "rgba(28,25,23,0.75)";
             div.style.backdropFilter = "none";
-            div.style.webkitBackdropFilter = "none";
+            div.style.setProperty("-webkit-backdrop-filter", "none");
             div.style.boxShadow = "none";
             div.style.border = "1px solid rgba(255,255,255,0.1)";
           });

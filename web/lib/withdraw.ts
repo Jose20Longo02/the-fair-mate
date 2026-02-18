@@ -13,9 +13,10 @@ const ERC20_ABI = [
 const CENTS_TO_USDC = 1e4;
 
 /** Gas limit for one ERC20 transfer (buffer over typical ~65k). */
-const GAS_LIMIT_ERC20 = 80_000n;
+const GAS_LIMIT_ERC20 = BigInt(80_000);
 /** Multiplier over estimated gas cost so user's wallet has enough after top-up. */
 const GAS_TOPUP_MULTIPLIER = 150; // 1.5x
+const FALLBACK_GAS_PRICE_WEI = BigInt(50) * (BigInt(10) ** BigInt(9)); // 50 gwei
 
 export type Network = NetworkId;
 
@@ -40,9 +41,9 @@ export async function sendGasTopUp(
   }
   const treasury = new Wallet(treasuryPk, provider);
   const feeData = await provider.getFeeData();
-  const gasPrice = feeData.gasPrice ?? feeData.maxFeePerGas ?? 50n * 10n ** 9n; // fallback 50 gwei
+  const gasPrice = feeData.gasPrice ?? feeData.maxFeePerGas ?? FALLBACK_GAS_PRICE_WEI;
   const gasLimit = GAS_LIMIT_ERC20 * BigInt(Math.max(1, numTransfers));
-  const nativeWei = (gasLimit * gasPrice * BigInt(GAS_TOPUP_MULTIPLIER)) / 100n;
+  const nativeWei = (gasLimit * gasPrice * BigInt(GAS_TOPUP_MULTIPLIER)) / BigInt(100);
 
   const treasuryBalance = await provider.getBalance(treasury.address);
   if (treasuryBalance < nativeWei) {

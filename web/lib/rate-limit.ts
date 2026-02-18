@@ -51,16 +51,17 @@ function getUpstashLimiter(limit: number, windowMs: number): import("@upstash/ra
   const redis = getUpstashRedis();
   if (!redis) return null;
   const key = `${limit}:${windowMs}`;
-  let limiter = upstashLimiters.get(key);
+  let limiter: import("@upstash/ratelimit").Ratelimit | null = upstashLimiters.get(key) ?? null;
   if (!limiter) {
     const { Ratelimit } = require("@upstash/ratelimit");
     const window = windowMsToUpstash(windowMs);
-    limiter = new Ratelimit({
+    const createdLimiter = new Ratelimit({
       redis,
       limiter: Ratelimit.slidingWindow(limit, window),
       prefix: "rl",
     });
-    upstashLimiters.set(key, limiter);
+    upstashLimiters.set(key, createdLimiter);
+    limiter = createdLimiter;
   }
   return limiter;
 }

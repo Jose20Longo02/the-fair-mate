@@ -193,7 +193,9 @@ export async function creditDepositByTxHash(
   if (!receipt) return { ok: false, processed: 0, error: "Transaction not found" };
 
   const usdc = new Contract(cfg.usdcAddress, ERC20_TRANSFER_ABI, provider);
-  const transferTopic = usdc.getEvent("Transfer").topicHash;
+  const transferEvent = usdc.interface.getEvent("Transfer");
+  if (!transferEvent) return { ok: false, processed: 0, error: "Transfer event not found in ABI" };
+  const transferTopic = transferEvent.topicHash;
   let processed = 0;
 
   for (const log of receipt.logs) {

@@ -29,7 +29,7 @@ export async function POST(
   }
 
   const drawBecauseBothDisconnected = !!body.drawBecauseBothDisconnected;
-  const disconnectedUserId = body.disconnectedUserId;
+  const disconnectedUserId: string | null = body.disconnectedUserId ?? null;
   if (!drawBecauseBothDisconnected && !disconnectedUserId) {
     return NextResponse.json({ error: "disconnectedUserId or drawBecauseBothDisconnected required" }, { status: 400 });
   }
@@ -148,6 +148,10 @@ export async function POST(
       };
       broadcastGameUpdate({ gameId, game: updatedGame, gameOver });
       return NextResponse.json({ ok: true, game: updatedGame, gameOver });
+    }
+
+    if (!disconnectedUserId) {
+      return NextResponse.json({ error: "disconnectedUserId required" }, { status: 400 });
     }
 
     const winnerId = disconnectedUserId === game.whiteId ? game.blackId : game.whiteId;
