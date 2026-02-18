@@ -19,9 +19,11 @@ export const metadata: Metadata = {
   title: "FairMate — 1v1 Chess for USDC",
   description: "Competitive chess platform with USDC stakes. Play 1v1, win the pot.",
   icons: {
-    icon: "/images/FairMate%20Logo.jpg",
-    shortcut: "/images/FairMate%20Logo.jpg",
-    apple: "/images/FairMate%20Logo.jpg",
+    icon: [
+      { url: "/images/FairMate Logo.jpg?v=2", type: "image/jpeg" },
+    ],
+    shortcut: [{ url: "/images/FairMate Logo.jpg?v=2", type: "image/jpeg" }],
+    apple: [{ url: "/images/FairMate Logo.jpg?v=2", type: "image/jpeg" }],
   },
 };
 
