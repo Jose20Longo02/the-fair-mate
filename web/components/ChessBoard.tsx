@@ -15,6 +15,7 @@ import { PLATFORM_FEE_PERCENT } from "@/lib/commission";
 const WS_URL = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:3002") : "";
 const WS_BASE = typeof window !== "undefined" ? (WS_URL.startsWith("http") ? WS_URL.replace(/^http/, "ws") : WS_URL).split("?")[0].replace(/\/$/, "") : "";
 const RECONNECT_DEADLINE_MS = 60 * 1000; // 1 minute to reconnect (must match WS server)
+const GAME_SYNC_POLL_MS = 3000; // fallback sync so opponent moves show even if WS delivery hiccups
 const SETTLEMENT_OVERLAY_MIN_MS = 3000; // mínimo tiempo mostrando "Acreditando fondos" / "Actualizando banca"
 const CHECKMATE_REVEAL_MS = 2800; // tiempo mostrando la casilla del rey en rojo antes del modal
 const BUTTON_BLUE = "#1e40af";
@@ -150,6 +151,15 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
     const interval = setInterval(() => setTick((n) => n + 1), 1000);
     return () => clearInterval(interval);
   }, [game?.id, game?.status]);
+
+  // Fallback sync: periodic refetch keeps board in sync if a WS update is delayed/lost.
+  useEffect(() => {
+    if (!game || game.status !== "active") return;
+    const interval = setInterval(() => {
+      void fetchGame(true);
+    }, GAME_SYNC_POLL_MS);
+    return () => clearInterval(interval);
+  }, [game?.id, game?.status, fetchGame]);
 
   const fetchGame = useCallback(async (isRefetch = false) => {
     try {
