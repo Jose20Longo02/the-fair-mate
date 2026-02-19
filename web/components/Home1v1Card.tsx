@@ -22,7 +22,7 @@ export default function Home1v1Card({ userId, balanceCents }: { userId: string; 
   const matchedRef = useRef(false);
   const searchingRef = useRef(false);
   const [searchElapsedSec, setSearchElapsedSec] = useState(0);
-  const noPlayersHint = status === "searching" && searchElapsedSec >= 30;
+  const noPlayersHint = status === "searching" && searchElapsedSec >= 20;
 
   const canAffordStake = selectedStake != null && balanceCents >= selectedStake;
 

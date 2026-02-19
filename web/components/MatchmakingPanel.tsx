@@ -18,7 +18,7 @@ export default function MatchmakingPanel({ userId }: { userId: string }) {
   const wsRef = useRef<WebSocket | null>(null);
   const matchedRef = useRef(false);
   const searchingRef = useRef(false);
-  const noPlayersHint = status === "searching" && searchElapsedSec >= 30;
+  const noPlayersHint = status === "searching" && searchElapsedSec >= 20;
 
   useEffect(() => {
     return () => {
