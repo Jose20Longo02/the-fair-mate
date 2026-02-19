@@ -6,6 +6,7 @@ import { checkRateLimit, getClientKey } from "@/lib/rate-limit";
 import { logger } from "@/lib/logger";
 import { isAllowedAvatar } from "@/lib/avatars";
 import { generateVerificationCode, sendVerificationEmail } from "@/lib/email";
+import { validateUsernameFormat } from "@/lib/username";
 
 const MIN_PASSWORD_LENGTH = 8;
 const REGISTER_LIMIT = 5;
@@ -67,7 +68,11 @@ export async function POST(request: Request) {
     }
 
     const nameTrimmed = typeof name === "string" ? name.trim() : "";
-    if (nameTrimmed.length >= 2) {
+    if (nameTrimmed.length > 0) {
+      const format = validateUsernameFormat(nameTrimmed);
+      if (!format.ok) {
+        return NextResponse.json({ error: format.reason ?? "Invalid username" }, { status: 400 });
+      }
       const users = await prisma.user.findMany({
         where: { name: { not: null } },
         select: { name: true },

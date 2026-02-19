@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, useMemo, useEffect, useRef } from "react";
 import AvatarPicker from "@/components/AvatarPicker";
 import { AVATAR_OPTIONS } from "@/lib/avatars";
+import { MAX_USERNAME_LENGTH, USERNAME_REGEX } from "@/lib/username";
 
 const USERNAME_MIN_LENGTH = 2;
 const USERNAME_CHECK_DEBOUNCE_MS = 400;
@@ -60,6 +61,11 @@ export default function Register() {
     confirmPassword.length > 0 ? password === confirmPassword : null;
 
   const nameTrimmed = name.trim();
+  const usernameFormatOk =
+    nameTrimmed.length === 0 ||
+    (nameTrimmed.length >= USERNAME_MIN_LENGTH &&
+      nameTrimmed.length <= MAX_USERNAME_LENGTH &&
+      USERNAME_REGEX.test(nameTrimmed));
   const usernameRequired = nameTrimmed.length >= USERNAME_MIN_LENGTH;
   const usernameValid = !usernameRequired || usernameCheck === true;
 
@@ -67,6 +73,16 @@ export default function Register() {
     if (nameTrimmed.length < USERNAME_MIN_LENGTH) {
       setUsernameCheck(null);
       setUsernameReason(nameTrimmed.length > 0 ? `At least ${USERNAME_MIN_LENGTH} characters` : null);
+      return;
+    }
+    if (nameTrimmed.length > MAX_USERNAME_LENGTH) {
+      setUsernameCheck(null);
+      setUsernameReason(`Maximum ${MAX_USERNAME_LENGTH} characters`);
+      return;
+    }
+    if (!USERNAME_REGEX.test(nameTrimmed)) {
+      setUsernameCheck(null);
+      setUsernameReason("Only letters, numbers, and underscore (_)");
       return;
     }
     setUsernameCheck("loading");
@@ -95,7 +111,8 @@ export default function Register() {
     passwordStrong &&
     passwordsMatch === true &&
     email.trim().length > 0 &&
-    usernameValid;
+    usernameValid &&
+    usernameFormatOk;
 
   function handleStep1Continue(e: React.FormEvent) {
     e.preventDefault();
@@ -197,7 +214,11 @@ export default function Register() {
                   type="text"
                   autoComplete="username"
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) => {
+                    const next = e.target.value.replace(/\s+/g, "");
+                    setName(next);
+                  }}
+                  maxLength={MAX_USERNAME_LENGTH}
                   className={`${inputBase} ${
                     usernameCheck === true
                       ? inputValid
@@ -205,7 +226,7 @@ export default function Register() {
                         ? inputInvalid
                         : inputNeutral
                   }`}
-                  placeholder="How others will see you (min. 2 characters)"
+                  placeholder="Letters/numbers/underscore only (min. 2)"
                 />
                 {nameTrimmed.length > 0 && (
                   <p
