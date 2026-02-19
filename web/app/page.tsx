@@ -59,7 +59,7 @@ export default async function Home() {
           <div className="flex shrink-0 flex-col items-center text-center">
             <div className="w-full min-w-0 max-w-lg px-1 sm:min-w-[18rem] sm:px-0">
               <h1 className="mx-auto max-w-[16ch] text-4xl font-black leading-tight text-white sm:text-5xl md:text-5xl lg:text-5xl">
-                Play chess for USDC where every game counts.
+                Play chess where every game counts.
               </h1>
               <p className="mx-auto mt-4 max-w-[18rem] text-[15px] font-normal leading-snug text-stone-400 sm:mt-5 sm:max-w-[20rem] sm:text-base md:mt-6 md:max-w-[22rem] md:text-lg">
                 Skill-based 1v1 matches against players at your level. Fixed USDC stakes. Transparent payout rules.
