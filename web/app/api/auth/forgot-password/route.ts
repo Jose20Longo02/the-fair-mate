@@ -7,6 +7,21 @@ import { generateResetToken, sendPasswordResetEmail } from "@/lib/email";
 const LIMIT = 3;
 const WINDOW_MS = 60_000 * 5; // 3 requests per 5 minutes
 
+function normalizeBaseUrl(url: string): string {
+  return url.trim().replace(/\/+$/, "");
+}
+
+function getBaseUrl(request: Request): string {
+  const envBase = process.env.BASE_URL?.trim() || process.env.NEXT_PUBLIC_BASE_URL?.trim();
+  if (envBase) return normalizeBaseUrl(envBase);
+
+  const proto = request.headers.get("x-forwarded-proto") ?? "https";
+  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+  if (host) return normalizeBaseUrl(`${proto}://${host}`);
+
+  return normalizeBaseUrl(new URL(request.url).origin);
+}
+
 export async function POST(request: Request) {
   const clientKey = getClientKey(request);
   const rate = await checkRateLimit(`forgot-password:${clientKey}`, LIMIT, WINDOW_MS);
@@ -46,7 +61,7 @@ export async function POST(request: Request) {
       data: { resetToken, resetTokenExpiresAt },
     });
 
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL ?? new URL(request.url).origin;
+    const baseUrl = getBaseUrl(request);
     const resetUrl = `${baseUrl}/reset-password?token=${resetToken}`;
 
     const result = await sendPasswordResetEmail(user.email, resetUrl);
