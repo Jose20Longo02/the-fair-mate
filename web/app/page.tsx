@@ -176,7 +176,9 @@ export default async function Home() {
             <span className="text-xs font-medium uppercase tracking-wider text-stone-500">or</span>
             <span className="h-px w-20 shrink-0 bg-gradient-to-r from-transparent via-stone-500 to-transparent" />
           </div>
-          <HomeChallengeCard userId={user.id} />
+          <div id="challenge-someone" className="scroll-mt-24">
+            <HomeChallengeCard userId={user.id} />
+          </div>
         </div>
 
         {/* My Challenges */}

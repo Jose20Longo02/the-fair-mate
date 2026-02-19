@@ -14,9 +14,11 @@ export default function MatchmakingPanel({ userId }: { userId: string }) {
   const router = useRouter();
   const [status, setStatus] = useState<"idle" | "searching" | "matched" | "error">("idle");
   const [error, setError] = useState("");
+  const [searchElapsedSec, setSearchElapsedSec] = useState(0);
   const wsRef = useRef<WebSocket | null>(null);
   const matchedRef = useRef(false);
   const searchingRef = useRef(false);
+  const noPlayersHint = status === "searching" && searchElapsedSec >= 30;
 
   useEffect(() => {
     return () => {
@@ -28,6 +30,7 @@ export default function MatchmakingPanel({ userId }: { userId: string }) {
   async function joinQueue(stake: number) {
     setError("");
     setStatus("searching");
+    setSearchElapsedSec(0);
     matchedRef.current = false;
     searchingRef.current = true;
     const token = await getWsToken();
@@ -90,7 +93,25 @@ export default function MatchmakingPanel({ userId }: { userId: string }) {
     wsRef.current = null;
     setStatus("idle");
     setError("");
+    setSearchElapsedSec(0);
   }
+
+  function inviteFriend() {
+    cancelSearch();
+    if (typeof window === "undefined") return;
+    const challengeSection = document.getElementById("challenge-someone");
+    if (challengeSection) {
+      challengeSection.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    router.push("/play#challenge-someone");
+  }
+
+  useEffect(() => {
+    if (status !== "searching") return;
+    const id = setInterval(() => setSearchElapsedSec((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [status]);
 
   return (
     <div className="mt-8 space-y-6">
@@ -114,6 +135,30 @@ export default function MatchmakingPanel({ userId }: { userId: string }) {
           <p className="mt-1 text-sm text-amber-700">
             Wait for another player to choose the same stake.
           </p>
+          {noPlayersHint && (
+            <div className="mx-auto mt-3 max-w-md rounded-md border border-amber-300 bg-amber-100 p-3 text-left">
+              <p className="text-sm font-semibold text-amber-900">No players available at the moment.</p>
+              <p className="mt-1 text-xs text-amber-800">
+                We&apos;ll keep searching. You can also invite a friend or try another stake.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={inviteFriend}
+                  className="rounded bg-emerald-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-800"
+                >
+                  Invite a friend
+                </button>
+                <button
+                  type="button"
+                  onClick={cancelSearch}
+                  className="rounded border border-amber-700 px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-200"
+                >
+                  Try another stake
+                </button>
+              </div>
+            </div>
+          )}
           <button
             type="button"
             onClick={cancelSearch}

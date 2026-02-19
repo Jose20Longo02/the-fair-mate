@@ -21,6 +21,8 @@ export default function Home1v1Card({ userId, balanceCents }: { userId: string; 
   const wsRef = useRef<WebSocket | null>(null);
   const matchedRef = useRef(false);
   const searchingRef = useRef(false);
+  const [searchElapsedSec, setSearchElapsedSec] = useState(0);
+  const noPlayersHint = status === "searching" && searchElapsedSec >= 30;
 
   const canAffordStake = selectedStake != null && balanceCents >= selectedStake;
 
@@ -40,6 +42,7 @@ export default function Home1v1Card({ userId, balanceCents }: { userId: string; 
     setError("");
     setSelectedStake(stake);
     setStatus("searching");
+    setSearchElapsedSec(0);
     matchedRef.current = false;
     searchingRef.current = true;
     const token = await getWsToken();
@@ -108,7 +111,25 @@ export default function Home1v1Card({ userId, balanceCents }: { userId: string; 
     setStatus("idle");
     setError("");
     setSelectedStake(null);
+    setSearchElapsedSec(0);
   }
+
+  function inviteFriend() {
+    cancelSearch();
+    if (typeof window === "undefined") return;
+    const challengeSection = document.getElementById("challenge-someone");
+    if (challengeSection) {
+      challengeSection.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    router.push("/play#challenge-someone");
+  }
+
+  useEffect(() => {
+    if (status !== "searching") return;
+    const id = setInterval(() => setSearchElapsedSec((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [status]);
 
   return (
     <div className="overflow-hidden rounded-xl border border-stone-600/90 bg-stone-800/90 text-white shadow-xl shadow-black/20 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-blue-950/25 hover:border-stone-500/80">
@@ -179,6 +200,32 @@ export default function Home1v1Card({ userId, balanceCents }: { userId: string; 
               <p className="mt-2 text-sm text-stone-400">
                 We&apos;re matching you with a player at your stake. You can cancel anytime.
               </p>
+              {noPlayersHint && (
+                <div className="mt-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-left">
+                  <p className="text-sm font-semibold text-amber-300">
+                    No players available at the moment.
+                  </p>
+                  <p className="mt-1 text-xs text-stone-300">
+                    We&apos;ll keep searching. You can also invite a friend or try another stake.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={inviteFriend}
+                      className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-medium text-white transition hover:bg-emerald-600"
+                    >
+                      Invite a friend
+                    </button>
+                    <button
+                      type="button"
+                      onClick={cancelSearch}
+                      className="rounded-lg border border-stone-500 px-3 py-2 text-xs font-medium text-stone-200 transition hover:bg-stone-700"
+                    >
+                      Try another stake
+                    </button>
+                  </div>
+                </div>
+              )}
               <button
                 type="button"
                 onClick={cancelSearch}

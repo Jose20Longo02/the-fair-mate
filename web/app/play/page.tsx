@@ -39,7 +39,7 @@ export default async function PlayPage() {
         <MatchmakingPanel userId={session.userId} />
       </section>
 
-      <section className="mt-12 border-t border-stone-200 pt-10">
+      <section id="challenge-someone" className="mt-12 scroll-mt-24 border-t border-stone-200 pt-10">
         <h2 className="text-lg font-semibold text-stone-900">Challenge someone</h2>
         <p className="mt-1 text-sm text-stone-600">
           Enter opponent email or nickname. You can negotiate the stake before playing.
