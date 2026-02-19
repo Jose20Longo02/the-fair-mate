@@ -1,7 +1,6 @@
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { Metadata } from "next";
-import Link from "next/link";
 import LoopingChessDemo from "@/components/LoopingChessDemo";
 import CtaButton from "@/components/CtaButton";
 import Home1v1Card from "@/components/Home1v1Card";
@@ -64,24 +63,6 @@ export default async function Home() {
               </h1>
               <p className="mx-auto mt-4 max-w-[18rem] text-[15px] font-normal leading-snug text-stone-400 sm:mt-5 sm:max-w-[20rem] sm:text-base md:mt-6 md:max-w-[22rem] md:text-lg">
                 Skill-based 1v1 matches against players at your level. Fixed USDC stakes. Transparent payout rules.
-              </p>
-              <p className="mx-auto mt-4 max-w-[20rem] text-sm text-stone-400 sm:max-w-[24rem] sm:text-base">
-                Learn{" "}
-                <Link href="/how-it-works" className="text-white underline underline-offset-2 hover:no-underline">
-                  how it works
-                </Link>
-                , review{" "}
-                <Link href="/fair-play" className="text-white underline underline-offset-2 hover:no-underline">
-                  Fair Play
-                </Link>
-                , see the{" "}
-                <Link href="/ranking" className="text-white underline underline-offset-2 hover:no-underline">
-                  Ranking
-                </Link>
-                , or contact{" "}
-                <Link href="/support" className="text-white underline underline-offset-2 hover:no-underline">
-                  Support
-                </Link>.
               </p>
               <CtaButton
                 href="/register"
