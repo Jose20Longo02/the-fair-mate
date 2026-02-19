@@ -15,10 +15,14 @@ import { PLATFORM_FEE_PERCENT } from "@/lib/commission";
 const WS_URL = typeof window !== "undefined" ? (process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:3002") : "";
 const WS_BASE = typeof window !== "undefined" ? (WS_URL.startsWith("http") ? WS_URL.replace(/^http/, "ws") : WS_URL).split("?")[0].replace(/\/$/, "") : "";
 const RECONNECT_DEADLINE_MS = 60 * 1000; // 1 minute to reconnect (must match WS server)
-const GAME_SYNC_POLL_MS = 3000; // fallback sync so opponent moves show even if WS delivery hiccups
 const SETTLEMENT_OVERLAY_MIN_MS = 3000; // mínimo tiempo mostrando "Acreditando fondos" / "Actualizando banca"
 const CHECKMATE_REVEAL_MS = 2800; // tiempo mostrando la casilla del rey en rojo antes del modal
 const BUTTON_BLUE = "#1e40af";
+const POLL_MS_WS_HEALTHY = 10_000;
+const POLL_MS_WS_UNHEALTHY = 1_000;
+const POLL_MS_WAITING_OPPONENT = 1_200;
+const POLL_MS_FAST_BURST = 700;
+const FAST_BURST_MS = 4_000;
 
 const PIECE_VALUE: Record<string, number> = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
 const BLACK_PIECE_SYMBOLS: Record<string, string> = { p: "♟", n: "♞", b: "♝", r: "♜", q: "♛", k: "♚" };
@@ -136,10 +140,12 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
   const [pendingPromotion, setPendingPromotion] = useState<{ from: string; to: string } | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const wsHealthyRef = useRef(false);
   const refetchOnDisconnectZeroRef = useRef(false);
   const cleanupRanRef = useRef(false);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const keepaliveIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const fastSyncUntilRef = useRef(0);
   const wsSeqRef = useRef(0);
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const gameStatusRef = useRef<string | null>(null);
@@ -176,14 +182,41 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
     fetchGame();
   }, [fetchGame]);
 
-  // Fallback sync: periodic refetch keeps board in sync if a WS update is delayed/lost.
+  const isMyTurnLive =
+    game != null &&
+    game.status === "active" &&
+    (game.turn === "w" ? game.whiteId === userId : game.blackId === userId);
+
+  // Adaptive fallback sync:
+  // - WS healthy + my turn: low-frequency safety polling
+  // - WS healthy + waiting opponent: faster polling for snappy opponent-move updates
+  // - WS unhealthy/reconnecting: aggressive polling until WS stabilizes
   useEffect(() => {
     if (!game || game.status !== "active") return;
-    const interval = setInterval(() => {
-      void fetchGame(true);
-    }, GAME_SYNC_POLL_MS);
-    return () => clearInterval(interval);
-  }, [game?.id, game?.status, fetchGame]);
+    let cancelled = false;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+
+    const nextDelay = () => {
+      if (Date.now() < fastSyncUntilRef.current) return POLL_MS_FAST_BURST;
+      if (!wsHealthyRef.current) return POLL_MS_WS_UNHEALTHY;
+      if (!isMyTurnLive) return POLL_MS_WAITING_OPPONENT;
+      return POLL_MS_WS_HEALTHY;
+    };
+
+    const schedule = () => {
+      if (cancelled) return;
+      timeout = setTimeout(async () => {
+        await fetchGame(true);
+        schedule();
+      }, nextDelay());
+    };
+
+    schedule();
+    return () => {
+      cancelled = true;
+      if (timeout) clearTimeout(timeout);
+    };
+  }, [game?.id, game?.status, isMyTurnLive, fetchGame]);
 
   // Cuando el contador de reconexión llega a 0, refetch tras 2.5s por si el forfeit se aplicó (cron/timer) y el WS no llegó
   useEffect(() => {
@@ -249,6 +282,7 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
       console.log("[FairMate WS] opening game socket", { gameId, userId, wsSeq, reconnectAttempt });
 
       ws.onopen = () => {
+        wsHealthyRef.current = true;
         console.log("[FairMate WS] game socket open", { gameId, userId, wsSeq });
         ws.send(JSON.stringify({ type: "joinGame", userId, whiteId, blackId }));
         // Keepalive every 10s — 1001/1005 often from browser suspending tab or proxy; frequent pings reduce "idle" perception.
@@ -262,6 +296,7 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
       try {
         const msg = JSON.parse(event.data as string);
         if (msg.type === "gameUpdate" && msg.game) {
+          fastSyncUntilRef.current = Date.now() + FAST_BURST_MS;
           const updates = msg.game;
           setGame((prev) => {
             const next = prev ? { ...prev, ...updates } : updates;
@@ -397,6 +432,7 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
       };
 
       ws.onclose = (event) => {
+        wsHealthyRef.current = false;
         const meta = ws as WebSocket & { __intentionalClose?: boolean; __seq?: number };
         const intentional = !!meta.__intentionalClose;
         if (gameStatusRef.current === "active") {
@@ -426,6 +462,10 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
         if (gameStatusRef.current === "active") {
           scheduleReconnect();
         }
+      };
+
+      ws.onerror = () => {
+        wsHealthyRef.current = false;
       };
     })();
 
@@ -521,6 +561,7 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
       setSelectedSquare(null);
       setPendingPromotion(null);
       setMoving(true);
+      fastSyncUntilRef.current = Date.now() + FAST_BURST_MS;
 
       if (gameEnded) {
         if (isCheckmate) {
