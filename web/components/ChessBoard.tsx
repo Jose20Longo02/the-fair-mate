@@ -128,6 +128,7 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
   const [checkmateKingSquare, setCheckmateKingSquare] = useState<string | null>(null);
   const [settlementPending, setSettlementPending] = useState<null | "acreditando" | "actualizando">(null);
   const settlementPendingShownAtRef = useRef<number | null>(null);
+  const settlementPendingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const checkmateRevealScheduledRef = useRef(false);
   const gameOverPayloadFromServerRef = useRef<GameOverPayload | null>(null);
   const [moving, setMoving] = useState(false);
@@ -147,9 +148,36 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
   const keepaliveIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fastSyncUntilRef = useRef(0);
   const wsSeqRef = useRef(0);
+  const previousGameStatusRef = useRef<string | null>(null);
+  const gameEndHandledRef = useRef(false);
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const gameStatusRef = useRef<string | null>(null);
   gameStatusRef.current = game?.status ?? null;
+
+  // Safety net: no matter the end-of-game path, never leave settlement overlay stuck.
+  useEffect(() => {
+    if (!settlementPending) {
+      if (settlementPendingTimeoutRef.current) {
+        clearTimeout(settlementPendingTimeoutRef.current);
+        settlementPendingTimeoutRef.current = null;
+      }
+      return;
+    }
+    if (settlementPendingTimeoutRef.current) {
+      clearTimeout(settlementPendingTimeoutRef.current);
+    }
+    settlementPendingTimeoutRef.current = setTimeout(() => {
+      settlementPendingShownAtRef.current = null;
+      setSettlementPending(null);
+      settlementPendingTimeoutRef.current = null;
+    }, SETTLEMENT_OVERLAY_MIN_MS);
+    return () => {
+      if (settlementPendingTimeoutRef.current) {
+        clearTimeout(settlementPendingTimeoutRef.current);
+        settlementPendingTimeoutRef.current = null;
+      }
+    };
+  }, [settlementPending]);
 
   // Live clocks: tick every second when game is active
   useEffect(() => {
@@ -217,6 +245,75 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
       if (timeout) clearTimeout(timeout);
     };
   }, [game?.id, game?.status, isMyTurnLive, fetchGame]);
+
+  // Fallback end-of-game transition handler: guarantees both players get
+  // checkmate reveal + delayed modal when transitioning from active.
+  useEffect(() => {
+    if (!game) return;
+
+    const prevStatus = previousGameStatusRef.current;
+    previousGameStatusRef.current = game.status;
+
+    if (game.status === "active") {
+      gameEndHandledRef.current = false;
+      return;
+    }
+
+    if (prevStatus !== "active") return;
+    if (gameEndHandledRef.current || showGameOverModal || checkmateRevealScheduledRef.current) return;
+
+    const payload =
+      gameOverPayloadFromServerRef.current ??
+      gameOverPayload ?? {
+        winnerId: game.winner ?? null,
+        stake: game.stake,
+        eloWhiteDelta: 0,
+        eloBlackDelta: 0,
+        isDraw: !game.winner,
+      };
+    setGameOverPayload((current) => current ?? payload);
+    gameEndHandledRef.current = true;
+
+    const weWon = payload.winnerId === userId;
+    const weLost = !!payload.winnerId && payload.winnerId !== userId;
+    const maybeShowSettlementOverlay = () => {
+      if (!weWon && !weLost) return;
+      settlementPendingShownAtRef.current = Date.now();
+      setSettlementPending(weWon ? "acreditando" : "actualizando");
+      setTimeout(() => {
+        settlementPendingShownAtRef.current = null;
+        setSettlementPending(null);
+      }, SETTLEMENT_OVERLAY_MIN_MS);
+    };
+
+    if (game.status === "checkmate") {
+      let kingSquare: string | null = null;
+      try {
+        const chess = new Chess(game.fen);
+        const cell = chess.board().flat().find((p) => p?.type === "k" && p.color === chess.turn());
+        if (cell) kingSquare = cell.square;
+      } catch {}
+
+      if (kingSquare) {
+        checkmateRevealScheduledRef.current = true;
+        setCheckmateKingSquare(kingSquare);
+        setTimeout(() => {
+          checkmateRevealScheduledRef.current = false;
+          setCheckmateKingSquare(null);
+          setShowGameOverModal(true);
+          maybeShowSettlementOverlay();
+          if (typeof window !== "undefined") window.scrollTo(0, 0);
+          router.refresh();
+        }, CHECKMATE_REVEAL_MS);
+        return;
+      }
+    }
+
+    setShowGameOverModal(true);
+    maybeShowSettlementOverlay();
+    if (typeof window !== "undefined") window.scrollTo(0, 0);
+    router.refresh();
+  }, [game, gameOverPayload, showGameOverModal, userId, router]);
 
   // Cuando el contador de reconexión llega a 0, refetch tras 2.5s por si el forfeit se aplicó (cron/timer) y el WS no llegó
   useEffect(() => {
@@ -325,6 +422,7 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
             return next;
           });
           if (msg.gameOver) {
+            gameOverPayloadFromServerRef.current = msg.gameOver;
             setGameOverPayload(msg.gameOver);
             setRematchRequestedByMe(false);
             setRematchRequestedByOpponent(false);
@@ -343,6 +441,7 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
               } catch {}
             }
             if (checkmateKingSquareFromUpdate) {
+              gameEndHandledRef.current = true;
               setCheckmateKingSquare(checkmateKingSquareFromUpdate);
               setTimeout(() => {
                 setCheckmateKingSquare(null);
@@ -359,17 +458,24 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
                 router.refresh();
               }, CHECKMATE_REVEAL_MS);
             } else {
-              setShowGameOverModal(true);
-              if (weWon || weLost) {
-                settlementPendingShownAtRef.current = Date.now();
-                setSettlementPending(weWon ? "acreditando" : "actualizando");
-                setTimeout(() => {
-                  settlementPendingShownAtRef.current = null;
-                  setSettlementPending(null);
-                }, SETTLEMENT_OVERLAY_MIN_MS);
+              if (updates.status === "checkmate") {
+                // If checkmate arrives without fen in this payload, let transition fallback
+                // compute king square from latest state and play reveal for both players.
+                gameEndHandledRef.current = false;
+              } else {
+                gameEndHandledRef.current = true;
+                setShowGameOverModal(true);
+                if (weWon || weLost) {
+                  settlementPendingShownAtRef.current = Date.now();
+                  setSettlementPending(weWon ? "acreditando" : "actualizando");
+                  setTimeout(() => {
+                    settlementPendingShownAtRef.current = null;
+                    setSettlementPending(null);
+                  }, SETTLEMENT_OVERLAY_MIN_MS);
+                }
+                if (typeof window !== "undefined") window.scrollTo(0, 0);
+                router.refresh();
               }
-              if (typeof window !== "undefined") window.scrollTo(0, 0);
-              router.refresh();
             }
           }
         }

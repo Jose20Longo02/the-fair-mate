@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { MATCHMAKING_SECRET, CRON_SECRET } from "@/lib/config";
 import { executeOnChainSettlement } from "@/lib/settle-on-chain";
+import { syncUserBalanceFromOnChain } from "@/lib/sync-balances-to-on-chain";
+import { type NetworkId } from "@/lib/networks";
 import { logger } from "@/lib/logger";
 
 /**
@@ -37,6 +39,18 @@ export async function GET(request: Request) {
           where: { id: game.id },
           data: { settlementStatus: "completed" },
         });
+        const network = ((process.env.SETTLEMENT_NETWORK ?? "polygon") as NetworkId);
+        try {
+          await Promise.all([
+            syncUserBalanceFromOnChain(winnerId, network),
+            syncUserBalanceFromOnChain(loserId, network),
+          ]);
+        } catch (e) {
+          logger.warn("retry_settlement_balance_sync_failed", {
+            gameId: game.id,
+            error: e instanceof Error ? e.message : String(e),
+          });
+        }
         completed++;
         logger.info("retry_settlement_success", { gameId: game.id });
       } else {

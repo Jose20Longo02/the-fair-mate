@@ -25,6 +25,13 @@ export type SettleOnChainResult =
   | { ok: true }
   | { ok: false; error: string };
 
+const SETTLEMENT_MAX_ATTEMPTS = 3;
+const RETRY_DELAY_MS = 1500;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
  * Liquidación on-chain: desde el perdedor se envía (stake − fee) al ganador y fee a TREASURY_ADDRESS.
  * El ganador no mueve su stake (menos gas, DB y wallet quedan alineados).
@@ -109,7 +116,22 @@ export async function executeOnChainSettlementAndUpdateGame(
     data: { settlementStatus: "pending" },
   });
 
-  const result = await executeOnChainSettlement(winnerId, loserId, stakeCents, networkId);
+  let result: SettleOnChainResult = { ok: false, error: "Settlement not attempted" };
+  for (let attempt = 1; attempt <= SETTLEMENT_MAX_ATTEMPTS; attempt++) {
+    result = await executeOnChainSettlement(winnerId, loserId, stakeCents, networkId);
+    if (result.ok) break;
+    logger.warn("settlement_attempt_failed", {
+      gameId,
+      winnerId,
+      loserId,
+      attempt,
+      maxAttempts: SETTLEMENT_MAX_ATTEMPTS,
+      error: result.error,
+    });
+    if (attempt < SETTLEMENT_MAX_ATTEMPTS) {
+      await sleep(RETRY_DELAY_MS * attempt);
+    }
+  }
 
   await prisma.game.update({
     where: { id: gameId },
@@ -119,10 +141,19 @@ export async function executeOnChainSettlementAndUpdateGame(
   // Keep app balances aligned with on-chain even if settlement partially failed/retried.
   // This prevents DB/wallet drift from accumulating between games.
   const network = (networkId ?? process.env.SETTLEMENT_NETWORK ?? DEFAULT_NETWORK) as NetworkId;
-  await Promise.all([
-    syncUserBalanceFromOnChain(winnerId, network),
-    syncUserBalanceFromOnChain(loserId, network),
-  ]);
+  try {
+    await Promise.all([
+      syncUserBalanceFromOnChain(winnerId, network),
+      syncUserBalanceFromOnChain(loserId, network),
+    ]);
+  } catch (e) {
+    logger.warn("post_settlement_balance_sync_failed", {
+      gameId,
+      winnerId,
+      loserId,
+      error: e instanceof Error ? e.message : String(e),
+    });
+  }
 
   if (!result.ok) {
     logger.error("settlement_failed_admin_alert", { gameId, winnerId, loserId, error: result.error });
