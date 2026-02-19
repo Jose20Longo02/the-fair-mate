@@ -152,15 +152,6 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
     return () => clearInterval(interval);
   }, [game?.id, game?.status]);
 
-  // Fallback sync: periodic refetch keeps board in sync if a WS update is delayed/lost.
-  useEffect(() => {
-    if (!game || game.status !== "active") return;
-    const interval = setInterval(() => {
-      void fetchGame(true);
-    }, GAME_SYNC_POLL_MS);
-    return () => clearInterval(interval);
-  }, [game?.id, game?.status, fetchGame]);
-
   const fetchGame = useCallback(async (isRefetch = false) => {
     try {
       const res = await fetch(`/api/games/${gameId}`);
@@ -184,6 +175,15 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
   useEffect(() => {
     fetchGame();
   }, [fetchGame]);
+
+  // Fallback sync: periodic refetch keeps board in sync if a WS update is delayed/lost.
+  useEffect(() => {
+    if (!game || game.status !== "active") return;
+    const interval = setInterval(() => {
+      void fetchGame(true);
+    }, GAME_SYNC_POLL_MS);
+    return () => clearInterval(interval);
+  }, [game?.id, game?.status, fetchGame]);
 
   // Cuando el contador de reconexión llega a 0, refetch tras 2.5s por si el forfeit se aplicó (cron/timer) y el WS no llegó
   useEffect(() => {
