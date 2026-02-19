@@ -19,7 +19,7 @@ const DISCONNECT_FORFEIT_MS = 1 * 60 * 1000; // 1 minute to reconnect or forfeit
 const DISCONNECT_FORFEIT_1001_MS = 90 * 1000; // 90s when code 1001 (browser suspend / tab background)
 const NOSHOW_FORFEIT_MS = 1 * 60 * 1000; // 1 minute for opponent to join game page or they forfeit
 const HEARTBEAT_INTERVAL_MS = 5000; // ping game room sockets every 5s to detect closed tabs
-const ELO_MARGIN = 200; // only match players within ± this ELO
+const ELO_MARGIN = 100; // only match players within ± this ELO
 
 // gameId -> { whiteId, blackId, sockets, connections, disconnectTimers, disconnectStartedAt, noShowTimer }
 const rooms = new Map();
