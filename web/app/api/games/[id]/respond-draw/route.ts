@@ -60,8 +60,12 @@ export async function POST(
 
       await settleGame(gameId, null, null, game.stake);
 
-      await prisma.game.update({
-        where: { id: gameId },
+      await prisma.game.updateMany({
+        where: {
+          id: gameId,
+          whiteBalanceBeforeCents: null,
+          blackBalanceBeforeCents: null,
+        },
         data: {
           whiteEloBefore: game.white.elo,
           blackEloBefore: game.black.elo,

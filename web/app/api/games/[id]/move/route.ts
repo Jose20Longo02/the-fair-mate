@@ -98,8 +98,12 @@ export async function POST(
         eloWhiteDelta = winnerIsWhite ? winnerNew - whiteElo : loserNew - whiteElo;
         eloBlackDelta = winnerIsWhite ? loserNew - blackElo : winnerNew - blackElo;
       }
-      await prisma.game.update({
-        where: { id },
+      await prisma.game.updateMany({
+        where: {
+          id,
+          whiteBalanceBeforeCents: null,
+          blackBalanceBeforeCents: null,
+        },
         data: {
           whiteEloBefore: whiteElo,
           blackEloBefore: blackElo,
@@ -266,8 +270,12 @@ export async function POST(
         }
       }
 
-      await prisma.game.update({
-        where: { id },
+      await prisma.game.updateMany({
+        where: {
+          id,
+          whiteBalanceBeforeCents: null,
+          blackBalanceBeforeCents: null,
+        },
         data: {
           whiteEloBefore: whiteElo,
           blackEloBefore: blackElo,

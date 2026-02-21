@@ -93,8 +93,12 @@ export async function POST(request: Request) {
         const whiteBalanceBefore = whiteBalanceNow + stake;
         const blackBalanceBefore = blackBalanceNow + stake;
 
-        await prisma.game.update({
-          where: { id: game.id },
+        await prisma.game.updateMany({
+          where: {
+            id: game.id,
+            whiteBalanceBeforeCents: null,
+            blackBalanceBeforeCents: null,
+          },
           data: {
             whiteEloBefore: whiteElo,
             blackEloBefore: blackElo,

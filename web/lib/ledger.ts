@@ -83,36 +83,52 @@ export async function settleGame(
   loserId: string | null,
   stake: number
 ) {
-  if (winnerId) {
-    const totalPot = 2 * stake;
-    const feeCents = Math.floor(totalPot * PLATFORM_FEE_PERCENT);
-    const winnerReceives = totalPot - feeCents; // e.g. stake=500 → 1000 - 50 = 950
-    await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx) => {
+    // Serialize by game so concurrent end-of-game handlers can't double-settle.
+    await tx.$queryRawUnsafe(`SELECT id FROM games WHERE id = $1 FOR UPDATE`, gameId);
+
+    const existingSettlementEntries = await tx.ledgerEntry.count({
+      where: {
+        gameId,
+        type: { in: ["win", "refund"] },
+      },
+    });
+    if (existingSettlementEntries > 0) {
+      return;
+    }
+
+    if (winnerId) {
+      const totalPot = 2 * stake;
+      const feeCents = Math.floor(totalPot * PLATFORM_FEE_PERCENT);
+      const winnerReceives = totalPot - feeCents; // e.g. stake=500 → 1000 - 50 = 950
       await tx.$queryRawUnsafe(`SELECT id FROM users WHERE id = $1 FOR UPDATE`, winnerId);
       await tx.user.update({ where: { id: winnerId }, data: { balance: { increment: winnerReceives } } });
       await tx.ledgerEntry.create({
-        data: { userId: winnerId, amount: winnerReceives, type: "win", gameId, description: `Total pot minus ${PLATFORM_FEE_PERCENT * 100}% commission` },
+        data: {
+          userId: winnerId,
+          amount: winnerReceives,
+          type: "win",
+          gameId,
+          description: `Total pot minus ${PLATFORM_FEE_PERCENT * 100}% commission`,
+        },
       });
-    });
-  } else if (loserId === null) {
-    // Draw: refund stake to both players
-    const game = await prisma.game.findUnique({
-      where: { id: gameId },
-      select: { whiteId: true, blackId: true },
-    });
-    if (game) {
-      await prisma.$transaction(async (tx) => {
-        await tx.$queryRawUnsafe(`SELECT id FROM users WHERE id = $1 FOR UPDATE`, game.whiteId);
-        await tx.$queryRawUnsafe(`SELECT id FROM users WHERE id = $1 FOR UPDATE`, game.blackId);
-        await tx.user.update({ where: { id: game.whiteId }, data: { balance: { increment: stake } } });
-        await tx.user.update({ where: { id: game.blackId }, data: { balance: { increment: stake } } });
-        await tx.ledgerEntry.create({
-          data: { userId: game.whiteId, amount: stake, type: "refund", gameId, description: "Draw" },
-        });
-        await tx.ledgerEntry.create({
-          data: { userId: game.blackId, amount: stake, type: "refund", gameId, description: "Draw" },
-        });
+    } else if (loserId === null) {
+      // Draw: refund stake to both players
+      const game = await tx.game.findUnique({
+        where: { id: gameId },
+        select: { whiteId: true, blackId: true },
+      });
+      if (!game) return;
+      await tx.$queryRawUnsafe(`SELECT id FROM users WHERE id = $1 FOR UPDATE`, game.whiteId);
+      await tx.$queryRawUnsafe(`SELECT id FROM users WHERE id = $1 FOR UPDATE`, game.blackId);
+      await tx.user.update({ where: { id: game.whiteId }, data: { balance: { increment: stake } } });
+      await tx.user.update({ where: { id: game.blackId }, data: { balance: { increment: stake } } });
+      await tx.ledgerEntry.create({
+        data: { userId: game.whiteId, amount: stake, type: "refund", gameId, description: "Draw" },
+      });
+      await tx.ledgerEntry.create({
+        data: { userId: game.blackId, amount: stake, type: "refund", gameId, description: "Draw" },
       });
     }
-  }
+  });
 }
