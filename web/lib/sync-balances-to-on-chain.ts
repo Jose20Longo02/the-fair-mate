@@ -7,6 +7,8 @@ import { logger } from "./logger";
 const ERC20_ABI = ["function balanceOf(address account) view returns (uint256)"] as const;
 /** USDC 6 decimals; we store cents → amountCents = balanceWei / 1e4 */
 const USDC_WEI_TO_CENTS = 1e4;
+const USDC_WEI_TO_CENTS_BI = BigInt(USDC_WEI_TO_CENTS);
+const MAX_CENTS_SAFE_BI = BigInt(Number.MAX_SAFE_INTEGER);
 
 const DEFAULT_NETWORK = "polygon";
 
@@ -30,7 +32,12 @@ export async function syncUserBalanceFromOnChain(
     const provider = new JsonRpcProvider(cfg.rpcUrl);
     const usdc = new Contract(cfg.usdcAddress, ERC20_ABI, provider);
     const balanceWei = await usdc.balanceOf(address);
-    const onChainCents = Math.floor(Number(balanceWei) / USDC_WEI_TO_CENTS);
+    const onChainCentsBi = balanceWei / USDC_WEI_TO_CENTS_BI;
+    if (onChainCentsBi > MAX_CENTS_SAFE_BI) {
+      logger.error("sync_user_balance_overflow", { userId, network: networkNorm });
+      return;
+    }
+    const onChainCents = Number(onChainCentsBi);
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -69,12 +76,14 @@ export type SyncResult = {
   network: string;
   totalUsers: number;
   updated: number;
+  failed: number;
   details: {
     userId: string;
     previousBalanceCents: number;
     onChainCents: number;
     newBalanceCents: number;
     adjusted: boolean;
+    error?: string;
   }[];
 };
 
@@ -108,59 +117,69 @@ export async function syncBalancesToOnChain(
 
     const details: SyncResult["details"] = [];
     let updatedCount = 0;
+    let failedCount = 0;
 
     for (const user of users) {
-      let address: string;
       try {
-        address = getDepositAddress(user.id);
-      } catch {
+        const address = getDepositAddress(user.id);
+        const balanceWei = await usdc.balanceOf(address);
+        const onChainCentsBi = balanceWei / USDC_WEI_TO_CENTS_BI;
+        if (onChainCentsBi > MAX_CENTS_SAFE_BI) {
+          throw new Error("on-chain balance exceeds supported integer range");
+        }
+        const onChainCents = Number(onChainCentsBi);
+        const previousBalanceCents = user.balance;
+        const delta = onChainCents - previousBalanceCents;
+        const adjusted = delta !== 0;
+
+        if (adjusted) {
+          await prisma.$transaction([
+            prisma.user.update({
+              where: { id: user.id },
+              data: { balance: onChainCents },
+            }),
+            prisma.ledgerEntry.create({
+              data: {
+                userId: user.id,
+                amount: delta,
+                type: "adjustment",
+                description: `Balance synced to on-chain USDC (${networkNorm})`,
+              },
+            }),
+          ]);
+          updatedCount++;
+          logger.info("sync_balance_to_on_chain", {
+            userId: user.id,
+            previousBalanceCents,
+            onChainCents,
+            network: networkNorm,
+          });
+        }
+
         details.push({
-          userId: user.id,
-          previousBalanceCents: user.balance,
-          onChainCents: 0,
-          newBalanceCents: user.balance,
-          adjusted: false,
-        });
-        continue;
-      }
-
-      const balanceWei = await usdc.balanceOf(address);
-      const onChainCents = Math.floor(Number(balanceWei) / USDC_WEI_TO_CENTS);
-      const previousBalanceCents = user.balance;
-      const delta = onChainCents - previousBalanceCents;
-      const adjusted = delta !== 0;
-
-      if (adjusted) {
-        await prisma.$transaction([
-          prisma.user.update({
-            where: { id: user.id },
-            data: { balance: onChainCents },
-          }),
-          prisma.ledgerEntry.create({
-            data: {
-              userId: user.id,
-              amount: delta,
-              type: "adjustment",
-              description: `Balance synced to on-chain USDC (${networkNorm})`,
-            },
-          }),
-        ]);
-        updatedCount++;
-        logger.info("sync_balance_to_on_chain", {
           userId: user.id,
           previousBalanceCents,
           onChainCents,
+          newBalanceCents: onChainCents,
+          adjusted,
+        });
+      } catch (e) {
+        failedCount++;
+        const msg = e instanceof Error ? e.message : String(e);
+        logger.error("sync_balance_user_failed", {
+          userId: user.id,
           network: networkNorm,
+          error: msg,
+        });
+        details.push({
+          userId: user.id,
+          previousBalanceCents: user.balance,
+          onChainCents: user.balance,
+          newBalanceCents: user.balance,
+          adjusted: false,
+          error: msg,
         });
       }
-
-      details.push({
-        userId: user.id,
-        previousBalanceCents,
-        onChainCents,
-        newBalanceCents: onChainCents,
-        adjusted,
-      });
     }
 
     return {
@@ -168,6 +187,7 @@ export async function syncBalancesToOnChain(
       network: networkNorm,
       totalUsers: users.length,
       updated: updatedCount,
+      failed: failedCount,
       details,
     };
   } catch (e) {

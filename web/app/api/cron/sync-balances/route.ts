@@ -22,11 +22,13 @@ export async function GET(request: Request) {
   const network =
     (request.headers.get("X-Sync-Network") || DEFAULT_NETWORK).trim();
 
-  const result = await syncBalancesToOnChain(network);
-
-  if (!result.ok) {
-    return NextResponse.json({ ok: false, error: result.error }, { status: 500 });
+  try {
+    const result = await syncBalancesToOnChain(network);
+    // Keep cron endpoint stable (2xx) even on transient provider errors;
+    // failures are reported in JSON and logs for observability.
+    return NextResponse.json(result);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return NextResponse.json({ ok: false, error: msg });
   }
-
-  return NextResponse.json(result);
 }
