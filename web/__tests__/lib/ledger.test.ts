@@ -9,16 +9,16 @@ function winnerReceivesCents(stakeCents: number): number {
 }
 
 describe("ledger financial logic (commission)", () => {
-  it("stake 100¢: total pot 200, fee 2%, winner receives 196¢", () => {
-    expect(winnerReceivesCents(100)).toBe(196);
+  it("stake 100¢: total pot 200, fee 5%, winner receives 190¢", () => {
+    expect(winnerReceivesCents(100)).toBe(190);
   });
 
-  it("stake 500¢: total pot 1000, fee 2%, winner receives 980¢", () => {
-    expect(winnerReceivesCents(500)).toBe(980);
+  it("stake 500¢: total pot 1000, fee 5%, winner receives 950¢", () => {
+    expect(winnerReceivesCents(500)).toBe(950);
   });
 
-  it("stake 1000¢: total pot 2000, fee 2%, winner receives 1960¢", () => {
-    expect(winnerReceivesCents(1000)).toBe(1960);
+  it("stake 1000¢: total pot 2000, fee 5%, winner receives 1900¢", () => {
+    expect(winnerReceivesCents(1000)).toBe(1900);
   });
 
   it("fee matches PLATFORM_FEE_PERCENT of total pot (2× stake)", () => {

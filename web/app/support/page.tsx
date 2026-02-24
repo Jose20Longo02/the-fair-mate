@@ -46,7 +46,7 @@ const faqSchema = {
       name: "How are stake payouts calculated?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Both players stake the same amount. The winner receives the pot minus a 2% platform fee. Draws are refunded.",
+        text: "Both players stake the same amount. The winner receives the pot minus a 5% platform fee. Draws are refunded.",
       },
     },
     {

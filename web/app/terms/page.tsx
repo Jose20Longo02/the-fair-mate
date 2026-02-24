@@ -94,7 +94,7 @@ export default function TermsPage() {
               <li>Both players agree to a stake amount before the match begins.</li>
               <li>The stake is deducted from each player&apos;s balance when the game starts.</li>
               <li>The winner receives their own stake plus 98% of the opponent&apos;s stake.</li>
-              <li>A platform fee of 2% is applied to the losing player&apos;s stake.</li>
+              <li>A platform fee of 5% is applied to the losing player&apos;s stake.</li>
               <li>In the event of a draw, both stakes are refunded in full.</li>
               <li>Games are subject to time controls. Running out of time results in a loss.</li>
               <li>Disconnection for an extended period may result in a forfeit.</li>

@@ -48,7 +48,7 @@ const STEPS = [
   },
   {
     title: "Winner takes the pot",
-    description: "The winner receives the combined stake minus a flat fee (2%).",
+    description: "The winner receives the combined stake minus a flat fee (5%).",
     image: "/images/Winner%20takes%20the%20pot.png",
   },
 ] as const;
