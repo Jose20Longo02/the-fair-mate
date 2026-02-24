@@ -17,6 +17,7 @@ const MAX_USERS_PER_RUN = Math.max(
   1,
   parseInt(process.env.SYNC_BALANCES_MAX_USERS_PER_RUN || "500", 10) || 500
 );
+const SYNC_BALANCES_CURSOR_CHAIN_ID = -999_001;
 
 const DEFAULT_NETWORK = "polygon";
 
@@ -98,6 +99,9 @@ export type SyncResult = {
   ok: true;
   network: string;
   totalUsers: number;
+  totalUsersInDb: number;
+  windowOffset: number;
+  nextOffset: number;
   updated: number;
   failed: number;
   details: {
@@ -130,11 +134,39 @@ export async function syncBalancesToOnChain(
   }
 
   try {
-    const users = await prisma.user.findMany({
+    const totalUsersInDb = await prisma.user.count();
+    let windowOffset = 0;
+    let canPersistCursor = true;
+    try {
+      const cursor = await prisma.indexedTransferCursor.findUnique({
+        where: { chainId: SYNC_BALANCES_CURSOR_CHAIN_ID },
+        select: { lastBlockNumber: true },
+      });
+      if (cursor && Number.isFinite(cursor.lastBlockNumber)) {
+        windowOffset = Math.max(0, cursor.lastBlockNumber);
+      }
+    } catch {
+      // Older deployments may not have indexed_transfer_cursors yet.
+      canPersistCursor = false;
+      windowOffset = 0;
+    }
+    if (windowOffset >= totalUsersInDb) windowOffset = 0;
+
+    let users = await prisma.user.findMany({
       select: { id: true, balance: true },
       orderBy: { id: "asc" },
+      skip: windowOffset,
       take: MAX_USERS_PER_RUN,
     });
+    if (users.length === 0 && windowOffset > 0) {
+      // Safety: if offset points past end due concurrent user deletions, wrap to start.
+      windowOffset = 0;
+      users = await prisma.user.findMany({
+        select: { id: true, balance: true },
+        orderBy: { id: "asc" },
+        take: MAX_USERS_PER_RUN,
+      });
+    }
 
     const provider = new JsonRpcProvider(cfg.rpcUrl);
     const usdc = new Contract(cfg.usdcAddress, ERC20_ABI, provider);
@@ -206,10 +238,31 @@ export async function syncBalancesToOnChain(
       }
     }
 
+    const nextOffset =
+      totalUsersInDb === 0 || users.length === 0
+        ? 0
+        : windowOffset + users.length >= totalUsersInDb
+          ? 0
+          : windowOffset + users.length;
+    if (canPersistCursor) {
+      try {
+        await prisma.indexedTransferCursor.upsert({
+          where: { chainId: SYNC_BALANCES_CURSOR_CHAIN_ID },
+          create: { chainId: SYNC_BALANCES_CURSOR_CHAIN_ID, lastBlockNumber: nextOffset },
+          update: { lastBlockNumber: nextOffset },
+        });
+      } catch {
+        // Non-fatal: sync result is still valid for this run.
+      }
+    }
+
     return {
       ok: true,
       network: networkNorm,
       totalUsers: users.length,
+      totalUsersInDb,
+      windowOffset,
+      nextOffset,
       updated: updatedCount,
       failed: failedCount,
       details,
