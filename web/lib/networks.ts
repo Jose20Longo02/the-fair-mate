@@ -114,13 +114,19 @@ export function getWithdrawNetworks(): { id: string; name: string }[] {
 /** For withdraw execution: get rpcUrl, usdcAddress, chainId by network id. */
 export function getWithdrawConfig(
   networkId: string
-): { rpcUrl: string; usdcAddress: string; chainId: number } | null {
+): { rpcUrl: string; usdcAddress: string; chainId: number; fallbackRpcUrl?: string } | null {
   const def = NETWORK_DEFINITIONS.find((n) => n.id === networkId);
   if (!def) return null;
   const rpcUrl = getEnv(def.rpcEnv);
   const usdcAddress = getEnv(def.usdcEnv) ?? def.defaultUsdc;
   if (!rpcUrl) return null;
-  return { rpcUrl, usdcAddress, chainId: def.chainId };
+  const fallbackRpcUrl = def.fallbackEnv ? getEnv(def.fallbackEnv) : undefined;
+  return {
+    rpcUrl,
+    usdcAddress,
+    chainId: def.chainId,
+    fallbackRpcUrl: fallbackRpcUrl ?? def.defaultFallback,
+  };
 }
 
 /** For indexer: transfer configs (index USDC transfers to deposit addresses). */
@@ -134,7 +140,7 @@ export function getIndexerTransferConfigs(): {
     chainId: n.chainId,
     rpcUrl: getEnv(n.rpcEnv)!,
     usdcAddress: getEnv(n.usdcEnv) ?? n.defaultUsdc,
-    fallbackRpcUrl: n.defaultFallback ?? (n.fallbackEnv ? getEnv(n.fallbackEnv) : undefined),
+    fallbackRpcUrl: (n.fallbackEnv ? getEnv(n.fallbackEnv) : undefined) ?? n.defaultFallback,
   }));
 }
 
@@ -153,7 +159,7 @@ export function getIndexerContractConfigs(): {
     chainId: n.chainId,
     rpcUrl: getEnv(n.rpcEnv)!,
     contractAddress: getEnv(n.depositContractEnv!)!,
-    fallbackRpcUrl: n.defaultFallback ?? (n.fallbackEnv ? getEnv(n.fallbackEnv) : undefined),
+    fallbackRpcUrl: (n.fallbackEnv ? getEnv(n.fallbackEnv) : undefined) ?? n.defaultFallback,
   }));
 }
 

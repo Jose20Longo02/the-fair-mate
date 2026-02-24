@@ -36,6 +36,30 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): 
   });
 }
 
+async function readUsdcBalanceWithFallback(
+  primaryRpcUrl: string,
+  fallbackRpcUrl: string | undefined,
+  usdcAddress: string,
+  address: string
+): Promise<bigint> {
+  const primaryProvider = new JsonRpcProvider(primaryRpcUrl);
+  const primaryUsdc = new Contract(usdcAddress, ERC20_ABI, primaryProvider);
+  try {
+    return await withTimeout(primaryUsdc.balanceOf(address), BALANCE_RPC_TIMEOUT_MS, "balanceOf");
+  } catch (primaryErr) {
+    if (!fallbackRpcUrl || fallbackRpcUrl === primaryRpcUrl) {
+      throw primaryErr;
+    }
+    const fallbackProvider = new JsonRpcProvider(fallbackRpcUrl);
+    const fallbackUsdc = new Contract(usdcAddress, ERC20_ABI, fallbackProvider);
+    return await withTimeout(
+      fallbackUsdc.balanceOf(address),
+      BALANCE_RPC_TIMEOUT_MS,
+      "balanceOf (fallback)"
+    );
+  }
+}
+
 /**
  * Syncs a single user's DB balance to match their deposit wallet USDC on-chain.
  * Call after every deposit, withdrawal, and game settlement so the app balance always matches the wallet.
@@ -53,9 +77,12 @@ export async function syncUserBalanceFromOnChain(
 
   try {
     const address = getDepositAddress(userId);
-    const provider = new JsonRpcProvider(cfg.rpcUrl);
-    const usdc = new Contract(cfg.usdcAddress, ERC20_ABI, provider);
-    const balanceWei = await withTimeout(usdc.balanceOf(address), BALANCE_RPC_TIMEOUT_MS, "balanceOf");
+    const balanceWei = await readUsdcBalanceWithFallback(
+      cfg.rpcUrl,
+      cfg.fallbackRpcUrl,
+      cfg.usdcAddress,
+      address
+    );
     const onChainCentsBi = balanceWei / USDC_WEI_TO_CENTS_BI;
     if (onChainCentsBi > MAX_CENTS_SAFE_BI) {
       logger.error("sync_user_balance_overflow", { userId, network: networkNorm });
@@ -168,9 +195,6 @@ export async function syncBalancesToOnChain(
       });
     }
 
-    const provider = new JsonRpcProvider(cfg.rpcUrl);
-    const usdc = new Contract(cfg.usdcAddress, ERC20_ABI, provider);
-
     const details: SyncResult["details"] = [];
     let updatedCount = 0;
     let failedCount = 0;
@@ -178,7 +202,12 @@ export async function syncBalancesToOnChain(
     for (const user of users) {
       try {
         const address = getDepositAddress(user.id);
-        const balanceWei = await withTimeout(usdc.balanceOf(address), BALANCE_RPC_TIMEOUT_MS, "balanceOf");
+        const balanceWei = await readUsdcBalanceWithFallback(
+          cfg.rpcUrl,
+          cfg.fallbackRpcUrl,
+          cfg.usdcAddress,
+          address
+        );
         const onChainCentsBi = balanceWei / USDC_WEI_TO_CENTS_BI;
         if (onChainCentsBi > MAX_CENTS_SAFE_BI) {
           throw new Error("on-chain balance exceeds supported integer range");
