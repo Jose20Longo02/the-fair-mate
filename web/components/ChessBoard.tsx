@@ -23,6 +23,7 @@ const POLL_MS_WS_UNHEALTHY = 1_000;
 const POLL_MS_WAITING_OPPONENT = 1_200;
 const POLL_MS_FAST_BURST = 700;
 const FAST_BURST_MS = 4_000;
+const WS_STALE_AFTER_MS = 8_000;
 
 const PIECE_VALUE: Record<string, number> = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
 const BLACK_PIECE_SYMBOLS: Record<string, string> = { p: "♟", n: "♞", b: "♝", r: "♜", q: "♛", k: "♚" };
@@ -147,6 +148,7 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const keepaliveIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fastSyncUntilRef = useRef(0);
+  const wsLastEventAtRef = useRef(0);
   const wsSeqRef = useRef(0);
   const previousGameStatusRef = useRef<string | null>(null);
   const gameEndHandledRef = useRef(false);
@@ -188,7 +190,10 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
 
   const fetchGame = useCallback(async (isRefetch = false) => {
     try {
-      const res = await fetch(`/api/games/${gameId}`);
+      const res = await fetch(`/api/games/${gameId}`, {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-cache" },
+      });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         setError(data.error || "Failed to load game");
@@ -226,6 +231,8 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
 
     const nextDelay = () => {
       if (Date.now() < fastSyncUntilRef.current) return POLL_MS_FAST_BURST;
+      const wsStale = wsLastEventAtRef.current > 0 && Date.now() - wsLastEventAtRef.current > WS_STALE_AFTER_MS;
+      if (wsStale) return POLL_MS_WS_UNHEALTHY;
       if (!wsHealthyRef.current) return POLL_MS_WS_UNHEALTHY;
       if (!isMyTurnLive) return POLL_MS_WAITING_OPPONENT;
       return POLL_MS_WS_HEALTHY;
@@ -380,6 +387,7 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
 
       ws.onopen = () => {
         wsHealthyRef.current = true;
+        wsLastEventAtRef.current = Date.now();
         console.log("[FairMate WS] game socket open", { gameId, userId, wsSeq });
         ws.send(JSON.stringify({ type: "joinGame", userId, whiteId, blackId }));
         // Keepalive every 10s — 1001/1005 often from browser suspending tab or proxy; frequent pings reduce "idle" perception.
@@ -391,6 +399,7 @@ export default function ChessBoard({ gameId, userId }: ChessBoardProps) {
 
       ws.onmessage = (event) => {
       try {
+        wsLastEventAtRef.current = Date.now();
         const msg = JSON.parse(event.data as string);
         if (msg.type === "gameUpdate" && msg.game) {
           fastSyncUntilRef.current = Date.now() + FAST_BURST_MS;
