@@ -42,7 +42,9 @@ export async function executeOnChainSettlement(
   stakeCents: number,
   networkId?: NetworkId
 ): Promise<SettleOnChainResult> {
-  const network = (networkId ?? process.env.SETTLEMENT_NETWORK ?? DEFAULT_NETWORK) as NetworkId;
+  const network = String(networkId ?? process.env.SETTLEMENT_NETWORK ?? DEFAULT_NETWORK)
+    .trim()
+    .toLowerCase() as NetworkId;
   const cfg = getWithdrawConfig(network);
   if (!cfg) {
     return { ok: false, error: `Settlement network ${network} is not configured` };
@@ -116,21 +118,32 @@ export async function executeOnChainSettlementAndUpdateGame(
     data: { settlementStatus: "pending" },
   });
 
+  const network = String(networkId ?? process.env.SETTLEMENT_NETWORK ?? DEFAULT_NETWORK)
+    .trim()
+    .toLowerCase() as NetworkId;
   let result: SettleOnChainResult = { ok: false, error: "Settlement not attempted" };
-  for (let attempt = 1; attempt <= SETTLEMENT_MAX_ATTEMPTS; attempt++) {
-    result = await executeOnChainSettlement(winnerId, loserId, stakeCents, networkId);
-    if (result.ok) break;
-    logger.warn("settlement_attempt_failed", {
-      gameId,
-      winnerId,
-      loserId,
-      attempt,
-      maxAttempts: SETTLEMENT_MAX_ATTEMPTS,
-      error: result.error,
-    });
-    if (attempt < SETTLEMENT_MAX_ATTEMPTS) {
-      await sleep(RETRY_DELAY_MS * attempt);
+  try {
+    for (let attempt = 1; attempt <= SETTLEMENT_MAX_ATTEMPTS; attempt++) {
+      result = await executeOnChainSettlement(winnerId, loserId, stakeCents, network);
+      if (result.ok) break;
+      logger.warn("settlement_attempt_failed", {
+        gameId,
+        winnerId,
+        loserId,
+        attempt,
+        maxAttempts: SETTLEMENT_MAX_ATTEMPTS,
+        error: result.error,
+      });
+      if (attempt < SETTLEMENT_MAX_ATTEMPTS) {
+        await sleep(RETRY_DELAY_MS * attempt);
+      }
     }
+  } catch (e) {
+    result = {
+      ok: false,
+      error: e instanceof Error ? e.message : String(e),
+    };
+    logger.error("settlement_unexpected_error", { gameId, winnerId, loserId, error: result.error });
   }
 
   await prisma.game.update({
@@ -140,7 +153,6 @@ export async function executeOnChainSettlementAndUpdateGame(
 
   // Keep app balances aligned with on-chain even if settlement partially failed/retried.
   // This prevents DB/wallet drift from accumulating between games.
-  const network = (networkId ?? process.env.SETTLEMENT_NETWORK ?? DEFAULT_NETWORK) as NetworkId;
   try {
     await Promise.all([
       syncUserBalanceFromOnChain(winnerId, network),

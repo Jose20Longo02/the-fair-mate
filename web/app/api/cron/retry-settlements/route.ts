@@ -7,7 +7,8 @@ import { type NetworkId } from "@/lib/networks";
 import { logger } from "@/lib/logger";
 
 /**
- * Cron: retry on-chain settlement for games with settlementStatus = "failed".
+ * Cron: retry on-chain settlement for games with settlementStatus = "failed",
+ * and for "pending" settlements stuck for too long (e.g. worker restart mid-settlement).
  * Run every 5–15 min (e.g. after check-timeouts). Auth: X-Matchmaking-Secret or Bearer CRON_SECRET.
  */
 export async function GET(request: Request) {
@@ -21,15 +22,23 @@ export async function GET(request: Request) {
   }
 
   try {
-    const failed = await prisma.game.findMany({
-      where: { settlementStatus: "failed", winner: { not: null } },
-      select: { id: true, winner: true, whiteId: true, blackId: true, stake: true },
+    const pendingCutoff = new Date(Date.now() - 2 * 60 * 1000);
+    const targets = await prisma.game.findMany({
+      where: {
+        winner: { not: null },
+        OR: [
+          { settlementStatus: "failed" },
+          { settlementStatus: "pending", updatedAt: { lt: pendingCutoff } },
+        ],
+      },
+      select: { id: true, winner: true, whiteId: true, blackId: true, stake: true, settlementStatus: true },
     });
 
     let retried = 0;
     let completed = 0;
+    let stillFailed = 0;
 
-    for (const game of failed) {
+    for (const game of targets) {
       const winnerId = game.winner!;
       const loserId = winnerId === game.whiteId ? game.blackId : game.whiteId;
       retried++;
@@ -54,15 +63,21 @@ export async function GET(request: Request) {
         completed++;
         logger.info("retry_settlement_success", { gameId: game.id });
       } else {
+        await prisma.game.update({
+          where: { id: game.id },
+          data: { settlementStatus: "failed" },
+        });
+        stillFailed++;
         logger.warn("retry_settlement_still_failed", { gameId: game.id, error: result.error });
       }
     }
 
     return NextResponse.json({
       ok: true,
-      failedCount: failed.length,
+      targetsCount: targets.length,
       retried,
       completed,
+      stillFailed,
     });
   } catch (e) {
     logger.error("retry_settlements_error", { error: String(e) });
