@@ -17,6 +17,31 @@ const ERC20_TRANSFER_ABI = [
 
 /** USDC has 6 decimals; we store cents (2 decimals). So amountCents = amount / 1e4 */
 const USDC_TO_CENTS = 1e4;
+const TRANSFER_MAX_BLOCKS_PER_RUN = Math.max(
+  10,
+  parseInt(process.env.INDEX_DEPOSITS_TRANSFER_MAX_BLOCKS || "300", 10) || 300
+);
+const RPC_CALL_TIMEOUT_MS = Math.max(
+  3_000,
+  parseInt(process.env.INDEX_DEPOSITS_RPC_TIMEOUT_MS || "15000", 10) || 15000
+);
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
 
 async function markPendingDepositCredited(
   chainId: number,
@@ -61,7 +86,7 @@ async function withRetry<T>(fn: () => Promise<T>, delayMs = 2000): Promise<T> {
   let lastErr: unknown;
   for (let i = 0; i < 3; i++) {
     try {
-      return await fn();
+      return await withTimeout(fn(), RPC_CALL_TIMEOUT_MS, "RPC call");
     } catch (e) {
       lastErr = e;
       const msg = String(e instanceof Error ? e.message : e);
@@ -148,7 +173,7 @@ export async function indexDeposits(): Promise<{
     for (const cfg of transferConfigs) {
       try {
         const provider = new JsonRpcProvider(cfg.rpcUrl);
-        const toB = await provider.getBlockNumber();
+        const toB = await withTimeout(provider.getBlockNumber(), RPC_CALL_TIMEOUT_MS, "getBlockNumber");
         const chunkSize = 10;
         let startFrom: number;
         let useCursor = false;
@@ -163,10 +188,11 @@ export async function indexDeposits(): Promise<{
           startFrom = defaultFromBlock(cfg.chainId, toB);
         }
         if (startFrom <= toB) {
-          scanned.push({ chainId: cfg.chainId, fromBlock: startFrom, toBlock: toB });
+          const toScan = Math.min(toB, startFrom + TRANSFER_MAX_BLOCKS_PER_RUN - 1);
+          scanned.push({ chainId: cfg.chainId, fromBlock: startFrom, toBlock: toScan });
           let lastScannedBlock = startFrom - 1;
-          for (let fromB = startFrom; fromB <= toB; fromB += chunkSize) {
-            const endB = Math.min(fromB + chunkSize - 1, toB);
+          for (let fromB = startFrom; fromB <= toScan; fromB += chunkSize) {
+            const endB = Math.min(fromB + chunkSize - 1, toScan);
             const result = await indexTransfersToDepositAddresses(cfg, depositAddressToUser, fromB, endB);
             totalProcessed += result.processed;
             errors.push(...result.errors);
@@ -405,7 +431,7 @@ async function indexDepositsForChain(cfg: ChainConfig): Promise<{ processed: num
   const provider = new JsonRpcProvider(cfg.rpcUrl);
   const contract = new Contract(cfg.contractAddress, DEPOSIT_ABI, provider);
 
-  const toBlock = await provider.getBlockNumber();
+  const toBlock = await withTimeout(provider.getBlockNumber(), RPC_CALL_TIMEOUT_MS, "getBlockNumber");
   const lastProcessed = await prisma.processedDepositEvent.findFirst({
     where: { chainId: cfg.chainId },
     orderBy: { blockNumber: "desc" },

@@ -9,8 +9,31 @@ const ERC20_ABI = ["function balanceOf(address account) view returns (uint256)"]
 const USDC_WEI_TO_CENTS = 1e4;
 const USDC_WEI_TO_CENTS_BI = BigInt(USDC_WEI_TO_CENTS);
 const MAX_CENTS_SAFE_BI = BigInt(Number.MAX_SAFE_INTEGER);
+const BALANCE_RPC_TIMEOUT_MS = Math.max(
+  3_000,
+  parseInt(process.env.SYNC_BALANCES_RPC_TIMEOUT_MS || "12000", 10) || 12000
+);
+const MAX_USERS_PER_RUN = Math.max(
+  1,
+  parseInt(process.env.SYNC_BALANCES_MAX_USERS_PER_RUN || "500", 10) || 500
+);
 
 const DEFAULT_NETWORK = "polygon";
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
 
 /**
  * Syncs a single user's DB balance to match their deposit wallet USDC on-chain.
@@ -31,7 +54,7 @@ export async function syncUserBalanceFromOnChain(
     const address = getDepositAddress(userId);
     const provider = new JsonRpcProvider(cfg.rpcUrl);
     const usdc = new Contract(cfg.usdcAddress, ERC20_ABI, provider);
-    const balanceWei = await usdc.balanceOf(address);
+    const balanceWei = await withTimeout(usdc.balanceOf(address), BALANCE_RPC_TIMEOUT_MS, "balanceOf");
     const onChainCentsBi = balanceWei / USDC_WEI_TO_CENTS_BI;
     if (onChainCentsBi > MAX_CENTS_SAFE_BI) {
       logger.error("sync_user_balance_overflow", { userId, network: networkNorm });
@@ -110,6 +133,7 @@ export async function syncBalancesToOnChain(
     const users = await prisma.user.findMany({
       select: { id: true, balance: true },
       orderBy: { id: "asc" },
+      take: MAX_USERS_PER_RUN,
     });
 
     const provider = new JsonRpcProvider(cfg.rpcUrl);
@@ -122,7 +146,7 @@ export async function syncBalancesToOnChain(
     for (const user of users) {
       try {
         const address = getDepositAddress(user.id);
-        const balanceWei = await usdc.balanceOf(address);
+        const balanceWei = await withTimeout(usdc.balanceOf(address), BALANCE_RPC_TIMEOUT_MS, "balanceOf");
         const onChainCentsBi = balanceWei / USDC_WEI_TO_CENTS_BI;
         if (onChainCentsBi > MAX_CENTS_SAFE_BI) {
           throw new Error("on-chain balance exceeds supported integer range");
